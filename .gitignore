@@ -1,0 +1,19 @@
+# Build artifacts
+native-host/target/
+extension/dist/
+dist/
+target/
+
+# Node
+node_modules/
+playwright-report/
+test-results/
+
+# Private keys — NEVER commit. Unpacked installs need only the public
+# manifest "key"; a private .pem is not required for this project.
+*.pem
+.dev-extension-key*
+
+# OS noise
+Thumbs.db
+.DS_Store
