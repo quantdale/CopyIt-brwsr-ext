@@ -1,0 +1,25 @@
+# Build artifacts
+native-host/target/
+extension/dist/
+dist/
+target/
+
+# Node
+node_modules/
+playwright-report/
+test-results/
+
+# Private keys — NEVER commit. Unpacked installs need only the public
+# manifest "key"; a private .pem is not required for this project.
+*.pem
+.dev-extension-key*
+
+# Generated native-host manifests carry machine-specific absolute paths.
+# They are written by scripts/generate-host-manifest.mjs / install.ps1 at
+# install time and must never be committed.
+scripts/host-manifest.json
+native-host/*.json.example
+
+# OS noise
+Thumbs.db
+.DS_Store

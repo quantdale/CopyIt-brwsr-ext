@@ -1,0 +1,17 @@
+{
+  "manifest_version": 3,
+  "name": "CopyIt",
+  "version": "0.1.0",
+  "description": "Compact prompt picker for CopyIt — search, filter, and copy prompts. No website injection.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwgkUClg1ls0yhngYUJQBnP39RoPQt7kBEo7vzICeYtl35bw2NVinSTElarFsfjozTfAwe3QqG+MaToGdDn3uWKVCrnmkGR92B2+RVoQEvM/WQk6wweN/sL4a8Nc9ysHImRuhsRo1tDPwauGDec3QYTg0wY+FoFz5FC6XGlgM0BJnd+KWqs06Vz+NqgnlY4FgT8rwsAT3Is/hFPXj/v2oE1CcMsVZ8Vtqy7/9EXgUA36JXZ/bOOn6utwF7RopkTDw3nK2XZzbgTpm/r3cUH9iD/W7IK3ZnVSSKFA/VNAwb88dxSmGvoNGdYVES5/VuZ2PfadZ1t1mv/H2gJJfWpoJywIDAQAB",
+  "permissions": ["nativeMessaging", "clipboardWrite"],
+  "action": {
+    "default_title": "CopyIt",
+    "default_popup": "popup.html"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
