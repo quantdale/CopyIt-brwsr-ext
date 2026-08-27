@@ -3,13 +3,13 @@ on: { workflow_dispatch: {}, push: { branches: ["feature/**"] } }
 jobs:
   integration:
     runs-on: windows-latest
+    # build.ps1 performs the release host build, npm ci, extension build and
+    # tsc once each; the dedicated runs below then exercise install-tooling
+    # behavior and the full native integration suite without duplicating work.
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-node@v4
         with: { node-version: 20 }
-      - run: npm ci
-      - run: npm run build
-      - run: cargo build --release --manifest-path native-host/Cargo.toml
-      - run: powershell -ExecutionPolicy Bypass -File scripts/build.ps1
-      - run: powershell -ExecutionPolicy Bypass -File scripts/test-native-integration.ps1
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1
+      - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-native-integration.ps1

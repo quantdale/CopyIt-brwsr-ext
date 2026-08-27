@@ -5,16 +5,16 @@ if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 npm ci | Out-Null
 npm run build | Out-Null
 $extId = (node scripts/get-extension-id.mjs extension/dist/manifest.json).Trim()
-$targetExe = Resolve-Path "native-host/target/release/copyit-native-host.exe"
-# Write host manifest pointing at target binary
-$manifestPath = "scripts/host-manifest.json"
+$targetExe = (Resolve-Path "native-host/target/release/copyit-native-host.exe").Path
+# Write a dev host manifest pointing at the freshly built binary.
+$manifestPath = Join-Path $PSScriptRoot "host-manifest.json"
+node scripts/generate-host-manifest.mjs extension/dist/manifest.json $targetExe $manifestPath | Out-Null
+if (($LASTEXITCODE -ne 0) -or (-not (Test-Path $manifestPath))) { throw "host manifest generation failed" }
 $manifest = Get-Content $manifestPath | ConvertFrom-Json
-$manifest.path = $targetExe.Path
-$manifest.allowed_origins = @("chrome-extension://$extId/")
-$manifest | ConvertTo-Json -Depth 4 | Set-Content $manifestPath -Encoding utf8
+if ($manifest.allowed_origins -notcontains "chrome-extension://$extId/") { throw "host manifest allowed_origins mismatch: $($manifest.allowed_origins)" }
 foreach ($browser in @("Google/Chrome", "Microsoft/Edge")) {
   $key = "HKCU:\Software\$browser\NativeMessagingHosts\com.quantdale.copyit"
   New-Item -Path $key -Force | Out-Null
-  Set-ItemProperty -Path $key -Name "(default)" -Value (Resolve-Path $manifestPath).Path
+  Set-ItemProperty -Path $key -Name "(default)" -Value $manifestPath
 }
-Write-Host "Dev install: host manifest points at $targetExe (rebuild will require re-registration if path changes). ID $extId"
+Write-Host "Dev install: host manifest at $manifestPath, exe $targetExe (rebuild will require re-registration if the path changes). ID $extId"

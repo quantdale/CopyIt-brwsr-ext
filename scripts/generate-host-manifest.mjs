@@ -10,7 +10,7 @@ import { resolve } from "node:path";
 
 const manifestPath = resolve(process.argv[2] ?? "extension/dist/manifest.json");
 let hostExePath = process.argv[3] ?? null;
-const outPath = resolve(process.argv[4] ?? "native-host/com.quantdale.copyit.json.example");
+const outPath = resolve(process.argv[4] ?? "scripts/host-manifest.json");
 
 let raw;
 try {

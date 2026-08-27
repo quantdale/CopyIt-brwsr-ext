@@ -14,16 +14,18 @@ if (-not $extId) { throw "Could not derive extension ID" }
 Write-Host "Extension ID: $extId"
 $installDir = Join-Path $env:LOCALAPPDATA "CopyIt Browser Extension/native-host"
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
-Copy-Item $hostPath (Join-Path $installDir "copyit-native-host.exe") -Force
-node scripts/generate-host-manifest.mjs | Out-Null
-$manifestSrc = "scripts/host-manifest.json"
-if (-not (Test-Path $manifestSrc)) { throw "host manifest not generated" }
-Copy-Item $manifestSrc (Join-Path $installDir "com.quantdale.copyit.json") -Force
+$installedExe = Join-Path $installDir "copyit-native-host.exe"
+Copy-Item $hostPath $installedExe -Force
+# Generate the native-host manifest directly into the install dir with the
+# absolute path of the *installed* binary (never a stale intermediate file).
+$hostManifest = Join-Path $installDir "com.quantdale.copyit.json"
+node scripts/generate-host-manifest.mjs extension/dist/manifest.json $installedExe $hostManifest | Out-Null
+if (($LASTEXITCODE -ne 0) -or (-not (Test-Path $hostManifest))) { throw "host manifest generation failed" }
 # Register for Chrome and Edge (HKCU, no admin)
 foreach ($browser in @("Google/Chrome", "Microsoft/Edge")) {
   $key = "HKCU:\Software\$browser\NativeMessagingHosts\com.quantdale.copyit"
   New-Item -Path $key -Force | Out-Null
-  Set-ItemProperty -Path $key -Name "(default)" -Value (Join-Path $installDir "com.quantdale.copyit.json")
+  Set-ItemProperty -Path $key -Name "(default)" -Value $hostManifest
   Write-Host "Registered $browser"
 }
 & (Join-Path $installDir "copyit-native-host.exe") --self-test

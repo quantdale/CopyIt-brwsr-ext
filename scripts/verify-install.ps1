@@ -1,6 +1,6 @@
 $ErrorActionPreference = "Stop"
 $extDist = "extension/dist/manifest.json"
-if (-not (Test-Path $extDist)) { throw "Extension build missing at $extDist — run npm run build" }
+if (-not (Test-Path $extDist)) { throw "Extension build missing at $extDist - run npm run build" }
 $manifest = Get-Content $extDist | ConvertFrom-Json
 if (-not $manifest.key) { throw "manifest missing key" }
 $extId = (node scripts/get-extension-id.mjs $extDist).Trim()

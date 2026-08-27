@@ -14,6 +14,12 @@ test-results/
 *.pem
 .dev-extension-key*
 
+# Generated native-host manifests carry machine-specific absolute paths.
+# They are written by scripts/generate-host-manifest.mjs / install.ps1 at
+# install time and must never be committed.
+scripts/host-manifest.json
+native-host/*.json.example
+
 # OS noise
 Thumbs.db
 .DS_Store
