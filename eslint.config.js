@@ -1,8 +1,37 @@
-export default [
-  { ignores: ["extension/dist/**", "native-host/target/**", "node_modules/**", "dist/**"] },
+// ESLint flat config (ESLint 9) with a correct TypeScript setup.
+//
+// `typescript-eslint` supplies the parser AND plugin AND the recommended rule
+// set, so `.ts` files are actually parsed as TypeScript instead of failing with
+// "Unexpected token" diagnostics. The canonical `eslint .` (see package.json)
+// runs this configuration against the whole repository; directories that ESLint
+// should never touch are listed under `ignores`.
+import js from "@eslint/js";
+import globals from "globals";
+import tseslint from "typescript-eslint";
+
+export default tseslint.config(
+  { ignores: ["node_modules/**", "extension/dist/**", "dist/**", "native-host/target/**", "test-results/**", "playwright-report/**"] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
-    files: ["extension/src/**/*.{ts,js}", "extension/tests/**/*.{ts,js}", "tests/**/*.{ts,js}", "scripts/**/*.{js,mjs}"],
-    languageOptions: { ecmaVersion: 2020, sourceType: "module" },
-    rules: {},
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
   },
-];
+  {
+    // Plain-JS script files (remote CLI/local tooling) run on Node.
+    files: ["**/*.{js,mjs,cjs}"],
+    languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // Browser extension modules.
+    files: ["extension/src/**/*.ts"],
+    languageOptions: { globals: { ...globals.browser } },
+  },
+  {
+    // Unit and Playwright tests run under Node/jsdom.
+    files: ["extension/tests/**/*.ts", "tests/**/*.ts"],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+);
