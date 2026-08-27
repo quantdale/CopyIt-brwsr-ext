@@ -74,8 +74,9 @@ export async function runRealBrowserCertification({ browserName, executablePath 
   let ctx;
   try {
     console.log(`\nLaunching ${browserName}...`);
+    const isCI = !!process.env.CI;
     ctx = await chromium.launchPersistentContext(userDir, {
-      headless: !!process.env.CI,
+      headless: isCI,
       executablePath,
       env: launchEnv,
       args: [
@@ -84,11 +85,11 @@ export async function runRealBrowserCertification({ browserName, executablePath 
         "--no-first-run",
         "--no-default-browser-check",
         "--disable-infobars",
+        ...(isCI ? ["--headless=new", "--disable-gpu", "--disable-dev-shm-usage"] : []),
       ],
       viewport: { width: 900, height: 700 },
       timeout: 30000,
     });
-
     await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
     await sleep(1500);
 

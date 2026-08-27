@@ -59,9 +59,11 @@ jobs:
         run: node tests/test-failure-states.mjs
 
       - name: Real Edge E2E (deterministic fixture + protected vault)
+        timeout-minutes: 5
         run: node tests/real-edge-e2e.mjs
 
       - name: Real Chrome E2E (deterministic fixture + protected vault)
+        timeout-minutes: 5
         run: node tests/real-chrome-e2e.mjs
 
       - name: Uninstall / DB preservation check
@@ -71,6 +73,7 @@ jobs:
           powershell -NoProfile -Command "if (Test-Path \"HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Chrome registry not removed\" }; if (Test-Path \"HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Edge registry not removed\" }; Write-Host \"Registry clean after uninstall\""
 
       - name: Reinstall + verify + smoke E2E
+        timeout-minutes: 5
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install.ps1
