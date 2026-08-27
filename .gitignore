@@ -8,6 +8,7 @@ target/
 node_modules/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # Private keys — NEVER commit. Unpacked installs need only the public
 # manifest "key"; a private .pem is not required for this project.

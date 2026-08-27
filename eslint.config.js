@@ -30,8 +30,8 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser } },
   },
   {
-    // Unit and Playwright tests run under Node/jsdom.
-    files: ["extension/tests/**/*.ts", "tests/**/*.ts"],
+    // Unit, E2E and integration tests run under Node and include browser evaluation contexts.
+    files: ["extension/tests/**/*.ts", "tests/**/*.{ts,js,mjs,cjs}"],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
 );
