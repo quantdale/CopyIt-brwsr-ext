@@ -141,8 +141,8 @@ The superseded report was intentionally replaced because it conflated Chromium-e
 This section records the final coordinated commits and their truthful evidence:
 
 ```text
-Extension branch:
-Extension final commit: recorded after the final extension commit is pushed
+Extension branch: `feature/copyit-v1-completion-20260828`
+Extension final commit: `cdd376743a1ebc555d11f8b38ee8c152d58ab387`
 Desktop branch: `feature/copyit-v1-completion-20260828`
 Desktop final commit: `c36e138ce7a6153906347699384ec901369fc5b8`
 Final decision: NOT CERTIFIED — Chrome Stable functional/manual evidence unavailable
