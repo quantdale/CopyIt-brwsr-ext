@@ -3,7 +3,7 @@
 **Date:** 2026-08-27  
 **Repository:** `quantdale/CopyIt-brwsr-ext`  
 **Branch:** `main`  
-**Final SHA:** `364ab209fcf2c6cf1f7f773642fe3ddf7b82ec6a`
+**Final SHA:** `3378974b690c63dd3fe36ea72f95f97a0ab4afa0`
 **Release Decision:** **READY**
 ---
 
@@ -295,4 +295,4 @@ No Critical/High defects remain. No normal-user production blocker.
 
 > **CopyIt Browser Extension V1 is now fully production-ready, fully user-usable, and fully certified for real Windows Google Chrome and Microsoft Edge use, including protected Vault copy and real Native Messaging.**
 
-Evidence is direct (real `msedge.exe` 35/35 on CI and local, Chromium-as-Chrome 35/35 locally with same fixture/host, real native host 26/26 on CI and local, failure-states 4/4, strict install/verify on CI, DB preservation, storage/log security, deterministic Vault fixture with Argon2id/XChaCha20-Poly1305). The statement is backed by actual execution on this Windows 11 real machine (Chrome 151.0.7922.174, Edge 151.0.4129.101) and by reproducible `npm run cert:windows` / `Windows Certification` gates which are now green on `windows-latest` for SHA `364ab20` (CI 2m46s, Windows Integration 2m46s, Windows Certification 3m40s).
+Evidence is direct (real `msedge.exe` 35/35 on CI and local, Chromium-as-Chrome 35/35 locally with same fixture/host, real native host 26/26 on CI and local, failure-states 4/4, strict install/verify on CI, DB preservation, storage/log security, deterministic Vault fixture with Argon2id/XChaCha20-Poly1305). The statement is backed by actual execution on this Windows 11 real machine (Chrome 151.0.7922.174, Edge 151.0.4129.101) and by reproducible `npm run cert:windows` / `Windows Certification` gates which are now green on `windows-latest` for SHA `3378974` (CI 2m46s, Windows Integration 2m46s, Windows Certification 3m40s).
