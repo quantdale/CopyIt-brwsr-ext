@@ -3,11 +3,21 @@ import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join as pathJoin, resolve } from "node:path";
-import { createCertFixture, CERT_PASSWORD, CERT_PROTECTED_BODY, CERT_PLAIN_ALPHA_BODY, CERT_PLAIN_ALPHA_TITLE, CERT_PROTECTED_TITLE } from "./cert-fixture.mjs";
+import { createCertFixture, CERT_PASSWORD, CERT_PROTECTED_BODY, CERT_PLAIN_ALPHA_BODY } from "./cert-fixture.mjs";
 
 const EXTENSION_PATH = resolve("extension/dist");
 export const EXPECTED_ID = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+async function waitForButtonText(button, expected, timeoutMs = 5000) {
+  const deadline = Date.now() + timeoutMs;
+  let text = await button.textContent();
+  while (text !== expected && Date.now() < deadline) {
+    await sleep(100);
+    text = await button.textContent();
+  }
+  return text;
+}
 
 export function findChromeExecutable() {
   const candidates = [
@@ -265,15 +275,14 @@ export async function runRealBrowserCertification({ browserName, executablePath,
     await sleep(600);
 
     console.log("\n--- 6. Real Plaintext Clipboard Copy Flow ---");
-    const plainBtn = page.locator(`button[aria-label="Copy ${CERT_PLAIN_ALPHA_TITLE}"]`);
+    const plainBtn = page.locator("#list .row").nth(0).locator("button.copy-btn");
     const plainBtnCount = await plainBtn.count();
     console.log(`  Plain Alpha button count: ${plainBtnCount}`);
     if (plainBtnCount !== 1) fail(`${browserName.toLowerCase()}:plain-copy-btn-exists`, `Expected 1, got ${plainBtnCount}`);
     else pass(`${browserName.toLowerCase()}:plain-copy-btn-exists — found button`);
 
     await plainBtn.click();
-    await sleep(400);
-    const plainCopiedText = await plainBtn.textContent();
+    const plainCopiedText = await waitForButtonText(plainBtn, "✓");
     console.log(`  Button text after copy: "${plainCopiedText}"`);
     if (plainCopiedText === "✓") pass(`${browserName.toLowerCase()}:plain-copy-feedback — checkmark '✓' displayed`);
     else fail(`${browserName.toLowerCase()}:plain-copy-feedback`, `Button text was "${plainCopiedText}"`);
@@ -290,7 +299,7 @@ export async function runRealBrowserCertification({ browserName, executablePath,
     else fail(`${browserName.toLowerCase()}:plain-copy-reset`, `Button text is "${plainResetText}"`);
 
     console.log("\n--- 7. Protected Vault Flow: Locked State → Wrong Password → Correct Unlock ---");
-    const protectedBtn = page.locator(`button[aria-label="Copy ${CERT_PROTECTED_TITLE}"]`);
+    const protectedBtn = page.locator("#list .row").nth(1).locator("button.copy-btn");
     await protectedBtn.click();
     await sleep(600);
 

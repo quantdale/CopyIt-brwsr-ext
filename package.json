@@ -17,6 +17,7 @@
     "cert:edge": "node tests/real-edge-e2e.mjs",
     "cert:chrome-install": "node tests/chrome-install-origin-verification.mjs",
     "cert:chromium": "node tests/chromium-functional-e2e.mjs",
+    "benchmark:performance": "node tests/performance-benchmark.mjs",
     "cert:chrome": "node tests/real-chrome-e2e.mjs",
     "cert:windows": "npm run cert:native && npm run cert:failure && npm run cert:chrome-install && npm run cert:chromium && npm run cert:edge && npm run cert:chrome"
   },

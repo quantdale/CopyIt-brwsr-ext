@@ -56,7 +56,8 @@ Those findings drove the changes below.
 | `npx --no-install tsc --noEmit` | PASS | `tsconfig.json` |
 | `npm run lint` | PASS | `eslint.config.mjs` |
 | `npm test -- --run` | PASS; 24 tests | `extension/tests/` |
-| `npm run e2e` | PASS; 7 Playwright tests | `tests/e2e/popup.spec.ts` |
+| `npm run e2e` | PASS; 12 Playwright tests | `tests/e2e/popup.spec.ts` |
+| `npm run benchmark:performance` | PASS; popup shell 382.39 ms; native first-page metadata 288.10/287.14/395.19 ms for 100/1,000/10,000 rows; 10k search 143.43 ms | `tests/performance-benchmark.mjs` |
 | native host fmt/clippy/tests | PASS; 79 unit + 4 subprocess tests | `native-host/` |
 | `scripts/test-native-integration.ps1` | PASS; wrapper propagated both Cargo suites | `scripts/test-native-integration.ps1` |
 | desktop fmt/check/clippy | PASS | sibling `quantdale/CopyIt` |
@@ -114,8 +115,11 @@ Chromium, and its nonzero result is not counted as a functional pass.
 
 ## Final release decision
 
-Implementation and all deterministic, native, desktop, Chromium, and Edge
-gates are runtime-verified. Full Chrome Stable certification is not claimed:
+Implementation and all deterministic, native, desktop, Chromium, Edge, and
+performance/accessibility gates are runtime-verified. The 10k title-search
+measurement was 143.43 ms against the plan's informational ~100 ms target;
+the host remained bounded and the result was not treated as a release-blocking
+failure. Full Chrome Stable certification is not claimed:
 functional automation is environment-blocked and the required manual Chrome
 acceptance was not performed in this session. Therefore the truthful decision
 for this evidence set is **NOT CERTIFIED** pending a real Chrome functional or

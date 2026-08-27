@@ -31,3 +31,4 @@ html, body { margin: 0; padding: 0; }
 .btn-primary { background: #111827; color: #fff; border-color: #111827; }
 .btn-ghost { background: transparent; }
 .tooltip { position: fixed; max-width: 320px; padding: 8px 10px; background: #111827; color: #fff; border-radius: 6px; font-size: 12px; line-height: 1.4; white-space: pre-wrap; word-break: break-word; z-index: 50; pointer-events: none; box-shadow: 0 6px 18px rgba(0,0,0,0.25); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; } }

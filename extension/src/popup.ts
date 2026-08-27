@@ -18,6 +18,7 @@ type PendingCopy = {
 };
 
 let pendingCopy: PendingCopy | null = null;
+let overlayReturnFocus: HTMLElement | null = null;
 let client: NativeClient;
 let tooltip: Tooltip;
 
@@ -166,7 +167,8 @@ function onCategoryChange(): void {
   loadSnippets(true);
 }
 
-function showOverlay(title: string, message: string): void {
+function showOverlay(title: string, message: string, returnFocus?: HTMLElement): void {
+  overlayReturnFocus = returnFocus ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null);
   els.overlayTitle.textContent = title;
   els.overlayMessage.textContent = message;
   els.vaultError.classList.add("hidden");
@@ -181,6 +183,9 @@ function hideOverlay(): void {
   els.vaultPassword.value = "";
   // Clear password buffer
   els.vaultPassword.value = "";
+  const returnFocus = overlayReturnFocus;
+  overlayReturnFocus = null;
+  if (returnFocus?.isConnected && !returnFocus.matches(":disabled")) returnFocus.focus();
 }
 
 async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
@@ -200,7 +205,7 @@ async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
     } catch (e) {
       const err = e as Error & { code?: string };
       if (err.code === "vault_locked" || err.message?.includes("vault_locked")) {
-        showOverlay("Unlock vault", "Enter password to copy this protected prompt.");
+        showOverlay("Unlock vault", "Enter password to copy this protected prompt.", btn);
         btn.disabled = false;
         // Keep the explicit operation and button reference for the one retry
         // after unlock. Do not rediscover it from user-visible label text.
@@ -235,11 +240,11 @@ async function handleUnlock(): Promise<void> {
     await client.request("unlockVault", { password });
     // Clear password buffers
     els.vaultPassword.value = "";
-    hideOverlay();
     state.vaultState = "unlocked";
     updateVaultUI();
     const pending = pendingCopy;
     pendingCopy = null;
+    hideOverlay();
     if (pending) {
       // Retry the original operation exactly once using its captured button.
       await handleCopy(pending.id, pending.button);
@@ -320,10 +325,23 @@ async function init(): Promise<void> {
   els.vaultUnlock.addEventListener("click", handleUnlock);
   els.vaultPassword.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleUnlock();
+  });
+  els.overlay.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       hideOverlay();
       pendingCopy = null;
+      return;
     }
+    if (e.key !== "Tab") return;
+    const focusables: Array<HTMLInputElement | HTMLButtonElement> = [els.vaultPassword, els.vaultCancel, els.vaultUnlock]
+      .filter((element) => !element.disabled);
+    if (focusables.length === 0) return;
+    const current = focusables.indexOf(document.activeElement as HTMLInputElement | HTMLButtonElement);
+    const next = e.shiftKey
+      ? (current <= 0 ? focusables.length - 1 : current - 1)
+      : (current === focusables.length - 1 ? 0 : current + 1);
+    e.preventDefault();
+    focusables[next].focus();
   });
   els.overlay.addEventListener("click", (e) => {
     if (e.target === els.overlay) {

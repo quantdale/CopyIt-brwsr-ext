@@ -109,6 +109,7 @@ npm run lint
 npm run build
 npx playwright install chromium
 npm run e2e
+npm run benchmark:performance
 cargo test --manifest-path native-host/Cargo.toml
 cargo clippy --manifest-path native-host/Cargo.toml --all-targets -- -D warnings
 cargo fmt --manifest-path native-host/Cargo.toml -- --check

@@ -45,7 +45,8 @@ The extension ID is derived from the committed manifest key by `scripts/get-exte
 | Desktop SQLite empty-library reconciliation | PASS | `empty_reconcile_removes_every_snippet`, desktop full tests, and native clear-all subprocess test |
 | Shared SQLite schema and vault compatibility | PASS | Native-host tests, desktop tests, deterministic fixture, migration/vault vectors |
 | Extension build/type/lint/unit | PASS | build, TypeScript, lint, and 24 Vitest tests |
-| Popup mock E2E | PASS | 7 Playwright tests, including stale-response and protected retry regressions |
+| Popup mock E2E | PASS | 12 Playwright tests, including stale-response, protected retry, pagination, accessibility, and failure-state regressions |
+| Performance/accessibility probe | PASS with informational target note | popup shell 382 ms; native first-page metadata under 1 s for 100/1,000/10,000 rows; 10k search 143 ms versus the ~100 ms target |
 | Native host formatting/clippy/tests | PASS | fmt, clippy `-D warnings`, 79 unit + 4 subprocess tests |
 | Native integration wrapper | PASS | `scripts/test-native-integration.ps1` propagated both Cargo suites |
 | Failure-state certification | PASS | wrong origin, future schema, and oversized frame observed fail-closed; 4/4 |
@@ -104,6 +105,7 @@ npm run cert:chromium
 npm run cert:edge
 npm run cert:chrome
 npm run cert:failure
+npm run benchmark:performance
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-native-integration.ps1
 
 npm audit --audit-level=high

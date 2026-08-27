@@ -16,11 +16,13 @@ describe("popup copy flow", () => {
     const reset = vi.fn();
     showCopySuccess(btn, "⧉", reset);
     expect(btn.textContent).toBe("✓");
+    expect(btn.getAttribute("aria-label")).toBe("Copied");
     expect(btn.classList.contains("copied")).toBe(true);
     vi.advanceTimersByTime(849);
     expect(btn.textContent).toBe("✓");
     vi.advanceTimersByTime(1);
     expect(btn.textContent).toBe("⧉");
+    expect(btn.getAttribute("aria-label")).toBeNull();
     expect(btn.classList.contains("copied")).toBe(false);
     expect(reset).toHaveBeenCalledOnce();
   });

@@ -85,8 +85,15 @@ function installMock(): void {
     const allItems = [
       { id: 1, title: "Update all repos", description: "Pulls every repo.", category: "Git", protected: false },
       { id: 2, title: "Secret launch prompt", description: "Requires the vault passphrase.", category: "Prompt", protected: true },
-      { id: 3, title: "Summarize conversation", description: "", category: "Prompt", protected: false },
+      { id: 3, title: "Summarize conversation", description: "This is a deliberately long tooltip description. ".repeat(80), category: "Prompt", protected: false },
     ];
+    const manyItems = Array.from({ length: 125 }, (_, index) => ({
+      id: 1000 + index,
+      title: `Many result ${index + 1}`,
+      description: "Synthetic pagination item",
+      category: index % 2 === 0 ? "Git" : "Prompt",
+      protected: false,
+    }));
     const listeners: Array<(msg: unknown) => void> = [];
     const port = {
       postMessage: (req: { method: string; requestId: string; params?: Record<string, unknown> }) => {
@@ -99,6 +106,9 @@ function installMock(): void {
           emit({ protocolVersion: 1, requestId: id, ok: false, error: { code, message, retryable: false } }, delay);
         switch (method) {
           case "hello":
+            if (new URLSearchParams(window.location.search).get("mode") === "host-error") {
+              return fail("database_unavailable", "CopyIt native host is not installed or registered.");
+            }
             return ok({
               protocolVersion: 1,
               hostVersion: "0.1.0",
@@ -115,21 +125,27 @@ function installMock(): void {
             {
               const query = String(req.params?.query ?? "").toLowerCase();
               const category = String(req.params?.category ?? "").toLowerCase();
-              const items = allItems.filter((item) => {
+              if (new URLSearchParams(window.location.search).get("mode") === "empty") {
+                return ok({ items: [], total: 0, offset: 0, pageSize: Number(req.params?.limit ?? 100), hasMore: false });
+              }
+              const sourceItems = query === "many" ? manyItems : allItems;
+              const filteredItems = sourceItems.filter((item) => {
                 const matchesQuery = !query || [item.title, item.description, item.category]
                   .some((value) => value.toLowerCase().includes(query));
                 const matchesCategory = !category || item.category.toLowerCase() === category;
                 return matchesQuery && matchesCategory;
               });
+              const offset = Number(req.params?.offset ?? 0);
+              const pageSize = Number(req.params?.limit ?? 100);
               // Delay one deliberately stale response so the test exercises the
               // production generation guard rather than a mock-only debounce.
               const delay = query === "a" ? 250 : 5;
               return ok({
-                items,
-                total: items.length,
-                offset: Number(req.params?.offset ?? 0),
-                pageSize: Number(req.params?.limit ?? 100),
-                hasMore: false,
+                items: filteredItems.slice(offset, offset + pageSize),
+                total: filteredItems.length,
+                offset,
+                pageSize,
+                hasMore: offset + pageSize < filteredItems.length,
               }, delay);
             }
           case "unlockVault":
@@ -170,7 +186,7 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await page.addInitScript(installMock);
   });
 
-  const gotoPopup = (page: Page) => page.goto(`${basePath}/popup.html`);
+  const gotoPopup = (page: Page, mode?: string) => page.goto(`${basePath}/popup.html${mode ? `?mode=${mode}` : ""}`);
   const rows = (page: Page) => page.locator(".row");
   const copied = (page: Page) =>
     page.evaluate(() => (window as unknown as { __copied: string | null }).__copied);
@@ -213,6 +229,33 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await expect(rows(page).first()).toContainText("Update all repos");
   });
 
+  test("keyboard focus exposes the tooltip accessibly", async ({ page }) => {
+    await gotoPopup(page);
+    const firstRow = rows(page).first();
+    await expect(firstRow).toHaveCount(1, { timeout: 5000 });
+    await firstRow.focus();
+    await expect(firstRow).toBeFocused();
+    await expect(page.locator("#tooltip")).toBeVisible();
+    await expect(firstRow).toHaveAttribute("aria-describedby", "tooltip");
+  });
+
+  test("long tooltip text stays within the popup viewport", async ({ page }) => {
+    await gotoPopup(page);
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(2).hover();
+    const tip = page.locator("#tooltip");
+    await expect(tip).toBeVisible();
+    const box = await tip.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(box!.width).toBeLessThanOrEqual(320);
+    expect(box!.x).toBeGreaterThanOrEqual(0);
+    expect(box!.y).toBeGreaterThanOrEqual(0);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width);
+    expect(box!.y + box!.height).toBeLessThanOrEqual(viewport!.height);
+  });
+
   test("stale search responses cannot replace newer results", async ({ page }) => {
     await gotoPopup(page);
     await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
@@ -226,11 +269,60 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await expect(page.locator(".row-title")).toHaveText(["Secret launch prompt"]);
   });
 
+  test("100+ results paginate without losing title-only rows", async ({ page }) => {
+    await gotoPopup(page);
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await page.fill("#search", "many");
+    await expect(rows(page)).toHaveCount(100, { timeout: 5000 });
+    await expect(page.getByRole("button", { name: "Load more" })).toBeVisible();
+    await page.locator("#list").evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+      element.dispatchEvent(new Event("scroll"));
+    });
+    await expect(rows(page)).toHaveCount(125, { timeout: 5000 });
+    await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+    await expect(page.locator(".snippet-body")).toHaveCount(0);
+  });
+
+  test("empty and host-error states are explicit", async ({ page }) => {
+    await gotoPopup(page, "empty");
+    await expect(page.locator("#status")).toHaveText("No prompts yet. Add some in the desktop app.", { timeout: 5000 });
+    await expect(rows(page)).toHaveCount(0);
+
+    await gotoPopup(page, "host-error");
+    await expect(page.locator("#status")).toHaveText("CopyIt native host is not installed or registered.", { timeout: 5000 });
+    await expect(page.locator("#status")).toHaveClass(/error/);
+  });
+
   test("plaintext copy writes the body to the clipboard", async ({ page }) => {
     await gotoPopup(page);
     await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
-    await rows(page).nth(2).locator(".copy-btn").click();
+    const copyButton = rows(page).nth(2).locator(".copy-btn");
+    await copyButton.click();
     await expect.poll(() => copied(page)).toBe("cdn-body-3");
+    await expect(copyButton).toHaveAttribute("aria-label", "Copied");
+    await expect(copyButton).toHaveAttribute("aria-label", "Copy Summarize conversation", { timeout: 2000 });
+  });
+
+  test("unlock dialog traps focus and returns focus after cancel", async ({ page }) => {
+    await gotoPopup(page);
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    const protectedButton = rows(page).nth(1).locator(".copy-btn");
+    await protectedButton.click();
+    await expect(page.locator("#vault-password")).toBeFocused();
+
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#vault-cancel")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#vault-unlock")).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.locator("#vault-password")).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(page.locator("#vault-unlock")).toBeFocused();
+
+    await page.click("#vault-cancel");
+    await expect(page.locator("#overlay")).toBeHidden();
+    await expect(protectedButton).toBeFocused();
   });
 
   test("protected copy opens the vault overlay and unlock retries the copy once", async ({ page }) => {
