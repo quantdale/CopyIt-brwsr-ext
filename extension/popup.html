@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>CopyIt</title>
+    <link rel="stylesheet" href="./src/popup.css" />
+  </head>
+  <body>
+    <div id="app" class="popup">
+      <header class="header">
+        <h1 class="title">CopyIt</h1>
+        <div class="header-actions">
+          <span id="vault-state" class="vault-state" aria-live="polite"></span>
+          <button id="lock-vault" class="btn btn-ghost hidden" type="button">Lock Vault</button>
+        </div>
+      </header>
+      <div class="controls">
+        <input id="search" class="search" type="search" placeholder="Search prompts…" autocomplete="off" aria-label="Search prompts" />
+        <label class="category-label" for="category-filter">Category</label>
+        <select id="category-filter" class="category-filter" aria-label="Category filter">
+          <option value="">All categories</option>
+        </select>
+      </div>
+      <div id="status" class="status" role="status" aria-live="polite"></div>
+      <div id="list" class="list" role="list"></div>
+      <div id="overlay" class="overlay hidden" role="dialog" aria-modal="true" aria-labelledby="overlay-title">
+        <div class="overlay-card">
+          <h2 id="overlay-title" class="overlay-title">Unlock vault</h2>
+          <p id="overlay-message" class="overlay-message">Enter password to copy this protected prompt.</p>
+          <label class="field-label" for="vault-password">Password</label>
+          <input id="vault-password" class="field" type="password" autocomplete="current-password" />
+          <p id="vault-error" class="field-error hidden" role="alert"></p>
+          <div class="overlay-actions">
+            <button id="vault-cancel" class="btn" type="button">Cancel</button>
+            <button id="vault-unlock" class="btn btn-primary" type="button">Unlock</button>
+          </div>
+        </div>
+      </div>
+      <div id="tooltip" class="tooltip hidden" role="tooltip"></div>
+    </div>
+    <script type="module" src="./src/popup.ts"></script>
+  </body>
+</html>

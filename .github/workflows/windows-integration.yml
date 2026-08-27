@@ -1,0 +1,15 @@
+name: Windows Integration
+on: { workflow_dispatch: {}, push: { branches: ["feature/**"] } }
+jobs:
+  integration:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: npm ci
+      - run: npm run build
+      - run: cargo build --release --manifest-path native-host/Cargo.toml
+      - run: powershell -ExecutionPolicy Bypass -File scripts/build.ps1
+      - run: powershell -ExecutionPolicy Bypass -File scripts/test-native-integration.ps1
