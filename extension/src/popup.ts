@@ -8,7 +8,7 @@ import { el, clearChildren, setHidden } from "./dom.js";
 const PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 120;
 
-let state: AppState = initialState();
+const state: AppState = initialState();
 let generation = 0;
 let pendingCopyId: number | null = null;
 let client: NativeClient;
@@ -290,7 +290,9 @@ async function handleLock(): Promise<void> {
     await client.request("lockVault");
     state.vaultState = "locked";
     updateVaultUI();
-  } catch {}
+  } catch {
+    // Best-effort lock; no user-visible failure is required.
+  }
 }
 
 async function init(): Promise<void> {
@@ -348,7 +350,9 @@ async function init(): Promise<void> {
   // Autofocus search if possible
   try {
     els.search.focus();
-  } catch {}
+  } catch {
+    // Focus is a convenience; some runtime contexts deny it, which is fine.
+  }
 
   // Initial hello + load
   try {

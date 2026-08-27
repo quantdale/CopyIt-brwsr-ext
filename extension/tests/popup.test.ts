@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 
 describe("popup copy flow", () => {
   it("shows checkmark for ~850ms after copy (mocked)", async () => {

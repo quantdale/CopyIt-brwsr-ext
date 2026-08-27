@@ -108,7 +108,9 @@ export class NativeClient {
   disconnect(): void {
     try {
       this.port?.disconnect();
-    } catch {}
+    } catch {
+      // Teardown: ignore errors from an already-closed port.
+    }
     this.port = null;
     this.connected = false;
   }

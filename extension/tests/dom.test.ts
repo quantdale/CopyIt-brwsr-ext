@@ -49,10 +49,8 @@ describe("dom — safe rendering and title-only rows", () => {
     // But row's visible text should not contain description
     // Row contains title + lock + button; description only via tooltip
     expect(row.textContent).toContain("Title");
-    // Description not directly visible unless tooltip shows
-    const visiblePart = row.innerText ?? row.textContent ?? "";
-    // In jsdom innerText not supported, fallback to textContent still contains description in data attr? No data attr not in textContent.
-    // So just ensure description not in row's child text nodes outside tooltip
+    // Description lives on data-description (read by the tooltip), never as
+    // visible text; the row shows the title only.
     expect(title.textContent).toBe("Title");
   });
 

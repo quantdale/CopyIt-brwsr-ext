@@ -55,4 +55,20 @@ describe("Tooltip", () => {
     target.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
     expect(tipEl.classList.contains("hidden")).toBe(true);
   });
+
+  it("opens on keyboard focus and dismisses on blur", () => {
+    const target = document.getElementById("target") as HTMLElement;
+    tooltip.attach(target, "Focus description");
+    // Focus is a keyboard-accessible activation path, mirroring the tooltip's
+    // 'focus' listener used by tab-navigation users.
+    target.dispatchEvent(new Event("focus"));
+    vi.advanceTimersByTime(300);
+    expect(tipEl.classList.contains("hidden")).toBe(false);
+    expect(tipEl.textContent).toBe("Focus description");
+    // aria-describedby is wired so assistive tech reads the description.
+    expect(target.getAttribute("aria-describedby")).toBe("tooltip");
+    target.dispatchEvent(new Event("blur"));
+    vi.advanceTimersByTime(120);
+    expect(tipEl.classList.contains("hidden")).toBe(true);
+  });
 });
