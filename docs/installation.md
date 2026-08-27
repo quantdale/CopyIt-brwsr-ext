@@ -1,7 +1,7 @@
 # Installation (Windows, Chrome/Edge, unpacked)
 
 ## Prerequisites
-- Windows 11, Chrome or Edge (stable), Rust (for host), Node 20+.
+- Windows 11, Chrome or Edge (stable), Rust 1.93.1 (for the host), and Node.js 24.3.0 (from `.node-version`).
 
 ## One-command install
 ```powershell

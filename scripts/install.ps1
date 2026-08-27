@@ -7,9 +7,11 @@ if (-not (Test-Path $hostPath)) {
   if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 }
 npm ci | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
 npm run build | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "npm run build failed" }
 $extId = (node scripts/get-extension-id.mjs extension/dist/manifest.json).Trim()
+if ($LASTEXITCODE -ne 0) { throw "extension ID derivation failed" }
 if (-not $extId) { throw "Could not derive extension ID" }
 Write-Host "Extension ID: $extId"
 $installDir = Join-Path $env:LOCALAPPDATA "CopyIt Browser Extension/native-host"

@@ -2,7 +2,7 @@
 
 Personal Chrome/Edge companion for [CopyIt](https://github.com/quantdale/CopyIt): a compact browser-toolbar prompt picker backed by the same local CopyIt library (search, copy, clipboard). It reads/searches/copies prompts and never injects into websites.
 
-**V1 is implemented on `feature/copyit-browser-extension-v1`.** This README explains how to build, install, use, and uninstall it. Deep design and migration semantics live in the docs.
+The current coordinated V1 implementation is developed on `feature/copyit-v1-completion-20260828`. This README explains how to build, install, use, and uninstall it. Deep design, migration semantics, and truthful certification evidence live in the docs.
 
 - `IMPLEMENTATION_PLAN.md` — approved architecture, SQLite migration, native-messaging protocol, popup UX, security, install tooling, tests, CI, and acceptance criteria.
 - `docs/protocol.md` — wire protocol (framing, envelope, methods, error codes, origin defense, logging).
@@ -41,7 +41,7 @@ Key decisions:
 ## Requirements
 
 - Windows 10/11 with Chrome or Edge (stable).
-- Node.js 20+ and Rust (`cargo`) to build from source.
+- Node.js 24.3.0 (the version in `.node-version`) and Rust 1.93.1 (the version in `rust-toolchain.toml`) to build from source.
 - The desktop CopyIt app installed — it owns the `copyit.db` you search/copy.
 
 ## Build

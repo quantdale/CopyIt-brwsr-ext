@@ -10,7 +10,7 @@
 import { spawn } from "node:child_process";
 import { resolve, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { mkdtempSync, mkdirSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 
 const HOST_EXE = resolve("native-host/target/release/copyit-native-host.exe");
@@ -60,6 +60,30 @@ function readResponse(proc, timeoutMs = 5000) {
   });
 }
 
+function waitForExit(proc, timeoutMs = 3000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, timeoutMs);
+    proc.once("exit", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+    proc.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code: null, signal: null, error });
+    });
+  });
+}
+
 async function main() {
   console.log("=== Testing Native Host Failure States ===");
 
@@ -68,13 +92,15 @@ async function main() {
   const badProc = spawn(HOST_EXE, ["chrome-extension://unauthorized_ext_id/"], {
     stdio: ["pipe", "pipe", "pipe"],
   });
-  let exitCode = null;
-  badProc.on("exit", (c) => (exitCode = c));
-  await new Promise((r) => setTimeout(r, 800));
-  if (exitCode === 2) {
+  badProc.stdin.end();
+  const badOriginOutcome = await waitForExit(badProc, 3000);
+  if (badOriginOutcome?.code === 2 && badOriginOutcome.signal === null) {
     pass("failure:wrong-origin-rejected — process exited with code 2 immediately");
+  } else if (badOriginOutcome === null) {
+    fail("failure:wrong-origin-rejected", "host remained alive past the bounded rejection timeout");
+    badProc.kill();
   } else {
-    fail("failure:wrong-origin-rejected", `Exit code was ${exitCode}`);
+    fail("failure:wrong-origin-rejected", `unexpected exit outcome: ${JSON.stringify(badOriginOutcome)}`);
   }
 
   // 2. Future schema rejection
@@ -117,27 +143,36 @@ async function main() {
   } catch (e) {
     fail("failure:unsupported-schema", e.message);
   }
-  futureProc.kill();
+  futureProc.stdin.end();
+  const futureOutcome = await waitForExit(futureProc);
+  if (futureOutcome === null) futureProc.kill();
 
   // 3. Oversized framing rejection
   console.log("\n--- 3. Oversized framing rejection ---");
   const normalProc = spawn(HOST_EXE, [EXPECTED_ORIGIN], {
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, APPDATA: testDir },
   });
   
   const bigLenBuf = Buffer.alloc(4);
   bigLenBuf.writeUInt32LE(50 * 1024 * 1024, 0);
   normalProc.stdin.write(bigLenBuf);
-  
-  let bigExit = null;
-  normalProc.on("exit", (c) => (bigExit = c));
-  await new Promise((r) => setTimeout(r, 800));
-  if (bigExit !== null) {
-    pass("failure:oversized-framing-rejected — host closed connection safely without OOM or hang");
-  } else {
+
+  // Closing stdin makes the malformed frame a complete subprocess test: a
+  // conforming host must reject the prefix and terminate without waiting for
+  // a 50 MB payload. A test-side kill is never a PASS condition.
+  normalProc.stdin.end();
+  const oversizedOutcome = await waitForExit(normalProc);
+  if (oversizedOutcome?.code === 1 && oversizedOutcome.signal === null) {
+    pass("failure:oversized-framing-rejected — host terminated with protocol-violation status 1");
+  } else if (oversizedOutcome === null) {
+    fail("failure:oversized-framing-rejected", "host remained alive past the bounded rejection timeout");
     normalProc.kill();
-    pass("failure:oversized-framing-rejected — host dropped invalid frame");
+  } else {
+    fail("failure:oversized-framing-rejected", `unexpected exit outcome: ${JSON.stringify(oversizedOutcome)}`);
   }
+
+  rmSync(testDir, { recursive: true, force: true });
 
   console.log(`\nFailure States Results: PASS: ${results.pass}, FAIL: ${results.fail}`);
   process.exit(results.fail > 0 ? 1 : 0);

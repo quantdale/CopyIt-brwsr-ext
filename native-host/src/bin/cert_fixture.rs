@@ -174,15 +174,8 @@ fn main() {
     println!("CERT_FIXTURE OK");
     println!("  data_dir: {}", data_dir.display());
     println!("  db_path: {}", db_path.display());
-    println!("  password: {}", CERT_PASSWORD);
-    println!("  protected_body: {}", CERT_PROTECTED_BODY);
-    println!("  protected_title: Protected Bravo");
-    println!("  categories: Cert-A (2), Cert-B (1)");
-    println!("  vault_salt: {}", CERT_SALT_B64);
-    println!("  vault_nonce: {}", CERT_VAULT_NONCE_B64);
-    println!("  vault_canary: {}", canary_b64);
-    println!("  protected_nonce: {}", CERT_PROTECTED_NONCE_B64);
-    println!("  protected_ciphertext: {}", prot_ct_b64);
+    println!("  rows: 3 (one plaintext, one protected, one plaintext)");
+    println!("  synthetic secret values: intentionally not logged");
 
     if args.iter().any(|a| a == "--print-env") {
         // Helper for Node tests to capture env

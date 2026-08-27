@@ -49,7 +49,8 @@ export class NativeClient {
     p.onMessage.addListener((msg: unknown) => this.handleMessage(msg as ResponseEnvelope));
     p.onDisconnect.addListener(() => {
       this.connected = false;
-      const err = chrome.runtime.lastError?.message ?? "Native host disconnected";
+      const runtimeError = typeof chrome !== "undefined" ? chrome.runtime?.lastError?.message : undefined;
+      const err = typeof runtimeError === "string" && runtimeError.length > 0 ? runtimeError : "Native host disconnected";
       for (const [, pending] of this.pending) {
         pending.reject(new Error(err));
         if (pending.timer) clearTimeout(pending.timer);

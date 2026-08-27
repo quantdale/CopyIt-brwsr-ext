@@ -8,7 +8,7 @@ export default defineConfig({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        popup: resolve(__dirname, "extension/popup.html"),
+        popup: resolve("extension/popup.html"),
       },
       output: {
         entryFileNames: "src/[name].js",

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { createSnippetRow } from "../src/dom.js";
+import { describe, it, expect, vi } from "vitest";
+import { createSnippetRow, truncateUtf8 } from "../src/dom.js";
 
 describe("dom — safe rendering and title-only rows", () => {
   it("renders title via textContent, not innerHTML (HTML injection safe)", () => {
@@ -34,6 +34,15 @@ describe("dom — safe rendering and title-only rows", () => {
     expect(title.classList.contains("snippet-title")).toBe(true);
   });
 
+  it("wires the production copy callback to the rendered button", () => {
+    const onCopy = vi.fn();
+    const row = createSnippetRow({ id: 6, title: "Copy me", description: "", category: "Prompt", protected: false }, onCopy);
+    const button = row.querySelector("button.copy-btn") as HTMLButtonElement;
+    button.click();
+    expect(onCopy).toHaveBeenCalledOnce();
+    expect(onCopy).toHaveBeenCalledWith(button);
+  });
+
   it("adds lock affordance for protected snippets", () => {
     const rowProt = createSnippetRow({ id: 2, title: "Secret", description: "", category: "G", protected: true });
     expect(rowProt.querySelector(".lock-mark")).toBeTruthy();
@@ -65,5 +74,10 @@ describe("dom — safe rendering and title-only rows", () => {
     expect(btn).toBeTruthy();
     // Row is flex: title has flex 1, btn flex-shrink 0
     expect(row.children[row.children.length - 1]).toBe(btn);
+  });
+
+  it("truncates metadata on a UTF-8 scalar boundary", () => {
+    expect(truncateUtf8("🙂x", 3)).toBe("");
+    expect(truncateUtf8("🙂x", 4)).toBe("🙂");
   });
 });

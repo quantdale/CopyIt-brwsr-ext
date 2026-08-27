@@ -71,4 +71,21 @@ describe("Tooltip", () => {
     vi.advanceTimersByTime(120);
     expect(tipEl.classList.contains("hidden")).toBe(true);
   });
+
+  it("moves aria-describedby when another target is shown", () => {
+    const first = document.getElementById("target") as HTMLElement;
+    const second = document.createElement("div");
+    document.body.appendChild(second);
+    tooltip.attach(first, "First");
+    tooltip.attach(second, "Second");
+
+    first.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    expect(first.getAttribute("aria-describedby")).toBe("tooltip");
+
+    second.dispatchEvent(new Event("mouseenter"));
+    vi.advanceTimersByTime(300);
+    expect(first.hasAttribute("aria-describedby")).toBe(false);
+    expect(second.getAttribute("aria-describedby")).toBe("tooltip");
+  });
 });

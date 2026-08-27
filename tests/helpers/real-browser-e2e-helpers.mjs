@@ -1,11 +1,12 @@
 import { chromium } from "playwright";
-import { mkdtempSync, existsSync, rmSync } from "node:fs";
+import { mkdtempSync, existsSync, readFileSync, rmSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join as pathJoin, resolve } from "node:path";
 import { createCertFixture, CERT_PASSWORD, CERT_PROTECTED_BODY, CERT_PLAIN_ALPHA_BODY, CERT_PLAIN_ALPHA_TITLE, CERT_PROTECTED_TITLE } from "./cert-fixture.mjs";
 
 const EXTENSION_PATH = resolve("extension/dist");
-const EXPECTED_ID = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
+export const EXPECTED_ID = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export function findChromeExecutable() {
@@ -30,37 +31,69 @@ export function findEdgeExecutable() {
   return null;
 }
 
-export async function runRealBrowserCertification({ browserName, executablePath }) {
+export function readExecutableVersion(executablePath) {
+  const direct = spawnSync(executablePath, ["--version"], {
+    encoding: "utf8",
+    timeout: 5000,
+    windowsHide: true,
+  });
+  const directText = `${direct.stdout ?? ""}\n${direct.stderr ?? ""}`;
+  const directMatch = directText.match(/\d+(?:\.\d+){2,3}/);
+  if (directMatch) return directMatch[0];
+
+  // A running browser may forward --version to an existing process and emit
+  // no usable stdout. The PE product version is a read-only fallback.
+  const escapedPath = executablePath.replaceAll("'", "''");
+  const fileVersion = spawnSync(
+    "powershell",
+    ["-NoProfile", "-Command", `(Get-Item -LiteralPath '${escapedPath}').VersionInfo.ProductVersion`],
+    { encoding: "utf8", timeout: 5000, windowsHide: true },
+  );
+  const fileText = `${fileVersion.stdout ?? ""}\n${fileVersion.stderr ?? ""}`;
+  return fileText.match(/\d+(?:\.\d+){2,3}/)?.[0] ?? null;
+}
+
+export async function runRealBrowserCertification({ browserName, executablePath, exitOnFailure = true }) {
   console.log(`\n╔═══════════════════════════════════════════════════════════════╗`);
   console.log(`║  CopyIt — Real ${browserName} E2E Certification Suite        ║`);
   console.log(`╚═══════════════════════════════════════════════════════════════╝\n`);
   console.log(`Date: ${new Date().toISOString()}`);
   console.log(`Browser: ${browserName}`);
   console.log(`Executable: ${executablePath}`);
+  console.log(`Browser version: ${readExecutableVersion(executablePath) ?? "unavailable"}`);
   console.log(`Extension: ${EXTENSION_PATH}`);
   console.log(`Expected ID: ${EXPECTED_ID}`);
 
   if (!existsSync(executablePath)) {
-    console.error(`FATAL: ${browserName} executable not found at ${executablePath}`);
-    console.error(`Tried candidates for ${browserName}. Install ${browserName} or set correct path.`);
-    process.exit(2);
+    const error = new Error(`${browserName} executable not found at ${executablePath}`);
+    if (exitOnFailure) {
+      console.error(`FATAL: ${error.message}`);
+      process.exit(2);
+    }
+    throw error;
   }
   if (!existsSync(EXTENSION_PATH)) {
-    console.error(`FATAL: extension build missing at ${EXTENSION_PATH} - run npm run build`);
-    process.exit(2);
+    const error = new Error(`extension build missing at ${EXTENSION_PATH} - run npm run build`);
+    if (exitOnFailure) {
+      console.error(`FATAL: ${error.message}`);
+      process.exit(2);
+    }
+    throw error;
   }
 
   const fixture = createCertFixture();
   console.log(`\nFixture tmpDir: ${fixture.tmpDir}`);
   console.log(`Fixture DB: ${fixture.dbPath}`);
-  console.log(`Fixture password: ${CERT_PASSWORD} (synthetic)`);
-  console.log(`Fixture protected body: ${CERT_PROTECTED_BODY}`);
+  console.log("Fixture contains synthetic plaintext and protected rows; secret values are intentionally not logged.");
 
   const userDir = mkdtempSync(pathJoin(tmpdir(), `copyit-${browserName.toLowerCase()}-cert-`));
   console.log(`Browser userDir: ${userDir}`);
 
   const isCI = !!process.env.CI;
-  const isolatedEnv = isCI ? {} : { APPDATA: fixture.tmpDir, LOCALAPPDATA: fixture.tmpDir };
+  // Always isolate both the canonical data directory and host logs. Release
+  // hosts intentionally ignore COPYIT_DATA_DIR, so APPDATA must point at the
+  // disposable fixture even on CI.
+  const isolatedEnv = { APPDATA: fixture.tmpDir, LOCALAPPDATA: fixture.tmpDir };
   const launchEnv = { ...process.env, ...isolatedEnv };
 
   const results = { pass: 0, fail: 0, details: [] };
@@ -246,9 +279,9 @@ export async function runRealBrowserCertification({ browserName, executablePath 
     else fail(`${browserName.toLowerCase()}:plain-copy-feedback`, `Button text was "${plainCopiedText}"`);
 
     const plainClipboard = await page.evaluate(() => navigator.clipboard.readText());
-    console.log(`  Clipboard length: ${plainClipboard.length}, content: "${plainClipboard}"`);
+    console.log(`  Clipboard length: ${plainClipboard.length}`);
     if (plainClipboard === CERT_PLAIN_ALPHA_BODY) pass(`${browserName.toLowerCase()}:plain-clipboard-exact — clipboard matches exact body`);
-    else fail(`${browserName.toLowerCase()}:plain-clipboard-exact`, `Expected "${CERT_PLAIN_ALPHA_BODY}", got "${plainClipboard}"`);
+    else fail(`${browserName.toLowerCase()}:plain-clipboard-exact`, `clipboard length ${plainClipboard.length} did not match the fixture`);
 
     await sleep(1000);
     const plainResetText = await plainBtn.textContent();
@@ -272,8 +305,11 @@ export async function runRealBrowserCertification({ browserName, executablePath 
 
     await page.fill("#vault-password", "wrong-password-xyz-123");
     await page.click("#vault-unlock");
-    await sleep(800);
-    const vaultErrorWrong = await page.textContent("#vault-error");
+    let vaultErrorWrong = await page.textContent("#vault-error");
+    for (let i = 0; i < 40 && !vaultErrorWrong.includes("Wrong password"); i++) {
+      await sleep(250);
+      vaultErrorWrong = await page.textContent("#vault-error");
+    }
     const overlayStillHiddenWrong = await page.$eval("#overlay", (el) => el.classList.contains("hidden"));
     console.log(`  After wrong password: error="${vaultErrorWrong}", overlay hidden? ${overlayStillHiddenWrong}`);
     if (vaultErrorWrong.includes("Wrong password") && !overlayStillHiddenWrong) {
@@ -283,11 +319,11 @@ export async function runRealBrowserCertification({ browserName, executablePath 
     }
 
     const clipboardAfterWrong = await page.evaluate(() => navigator.clipboard.readText());
-    console.log(`  Clipboard after wrong password: "${clipboardAfterWrong}"`);
+    console.log(`  Clipboard after wrong password length: ${clipboardAfterWrong.length}`);
     if (clipboardAfterWrong === CERT_PLAIN_ALPHA_BODY && clipboardAfterWrong !== CERT_PROTECTED_BODY) {
       pass(`${browserName.toLowerCase()}:protected-wrong-no-leak — clipboard not overwritten with protected body`);
     } else if (clipboardAfterWrong !== CERT_PROTECTED_BODY) {
-      pass(`${browserName.toLowerCase()}:protected-wrong-no-leak — clipboard does not contain protected body (is "${clipboardAfterWrong.substring(0, 30)}")`);
+      pass(`${browserName.toLowerCase()}:protected-wrong-no-leak — clipboard does not contain protected body`);
     } else {
       fail(`${browserName.toLowerCase()}:protected-wrong-no-leak`, `Clipboard leaked protected body`);
     }
@@ -308,18 +344,18 @@ export async function runRealBrowserCertification({ browserName, executablePath 
     else fail(`${browserName.toLowerCase()}:vault-unlocked-ui`, `state="${vaultStateAfter}"`);
 
     const protectedClipboard = await page.evaluate(() => navigator.clipboard.readText());
-    console.log(`  Protected clipboard length: ${protectedClipboard.length}, content: "${protectedClipboard}"`);
+    console.log(`  Protected clipboard length: ${protectedClipboard.length}`);
     if (protectedClipboard === CERT_PROTECTED_BODY) pass(`${browserName.toLowerCase()}:protected-clipboard-exact — protected body copied exactly`);
-    else fail(`${browserName.toLowerCase()}:protected-clipboard-exact`, `Expected "${CERT_PROTECTED_BODY}", got "${protectedClipboard}"`);
+    else fail(`${browserName.toLowerCase()}:protected-clipboard-exact`, `clipboard length ${protectedClipboard.length} did not match the fixture`);
 
     const domText = await page.evaluate(() => document.body.innerText);
     if (!domText.includes(CERT_PROTECTED_BODY)) pass(`${browserName.toLowerCase()}:protected-not-in-dom — protected body not rendered in popup`);
     else fail(`${browserName.toLowerCase()}:protected-not-in-dom`, `Protected body found in DOM`);
 
     const pwdValue = await page.$eval("#vault-password", (el) => el.value);
-    console.log(`  Password field after unlock: "${pwdValue}" (should be empty)`);
+    console.log(`  Password field cleared after unlock: ${pwdValue === ""}`);
     if (pwdValue === "") pass(`${browserName.toLowerCase()}:password-cleared — password field cleared after unlock`);
-    else fail(`${browserName.toLowerCase()}:password-cleared`, `value="${pwdValue}"`);
+    else fail(`${browserName.toLowerCase()}:password-cleared`, "password input retained a value");
 
     await sleep(1200);
     const protBtnAfter = await protectedBtn.textContent().catch(() => "missing");
@@ -351,7 +387,7 @@ export async function runRealBrowserCertification({ browserName, executablePath 
       }
       return report;
     });
-    console.log("  Storage Report:", JSON.stringify(storageReport));
+    console.log(`  Storage Report: localStorage=${storageReport.localStorageKeys.length}, sessionStorage=${storageReport.sessionStorageKeys.length}, indexedDB=${storageReport.indexedDBs.length}, chrome.storage=${storageReport.chromeStorage === null ? "unavailable" : "checked"}`);
     const storageClean = storageReport.localStorageKeys.length === 0 && storageReport.sessionStorageKeys.length === 0 && storageReport.indexedDBs.length === 0;
     if (storageClean) pass(`${browserName.toLowerCase()}:security-storage-clean — no persistent storage`);
     else fail(`${browserName.toLowerCase()}:security-storage-clean`, JSON.stringify(storageReport));
@@ -360,14 +396,25 @@ export async function runRealBrowserCertification({ browserName, executablePath 
     if (!chromeStorageStr.includes(CERT_PROTECTED_BODY) && !chromeStorageStr.includes(CERT_PASSWORD)) {
       pass(`${browserName.toLowerCase()}:security-chrome-storage-clean — chrome.storage contains no secrets`);
     } else {
-      fail(`${browserName.toLowerCase()}:security-chrome-storage-clean`, chromeStorageStr.substring(0, 200));
+      fail(`${browserName.toLowerCase()}:security-chrome-storage-clean`, "forbidden fixture value found in chrome.storage");
     }
 
     const allLogs = consoleMessages.join("\n");
     if (!allLogs.includes(CERT_PROTECTED_BODY) && !allLogs.includes(CERT_PASSWORD)) {
       pass(`${browserName.toLowerCase()}:security-console-clean — logs contain no protected plaintext/password`);
     } else {
-      fail(`${browserName.toLowerCase()}:security-console-clean`, `Leaked in logs: ${allLogs.substring(0, 500)}`);
+      fail(`${browserName.toLowerCase()}:security-console-clean`, "forbidden fixture value found in console logs");
+    }
+
+    const nativeLogPath = pathJoin(fixture.tmpDir, "CopyIt", "logs", "native-host.log");
+    const nativeLog = existsSync(nativeLogPath) ? readFileSync(nativeLogPath, "utf8") : null;
+    const forbiddenLogValues = [CERT_PASSWORD, CERT_PROTECTED_BODY, CERT_PLAIN_ALPHA_BODY, "vault_key", "ciphertext"];
+    if (nativeLog !== null && forbiddenLogValues.every((value) => !nativeLog.includes(value))) {
+      pass(`${browserName.toLowerCase()}:security-native-log-clean — isolated host log contains no secrets`);
+    } else if (nativeLog === null) {
+      fail(`${browserName.toLowerCase()}:security-native-log-clean`, "isolated native-host.log was not created");
+    } else {
+      fail(`${browserName.toLowerCase()}:security-native-log-clean`, "forbidden fixture value found in isolated native-host.log");
     }
 
     console.log("\n--- 9. Lock Again & Verify Locked Returns ---");
@@ -426,10 +473,18 @@ export async function runRealBrowserCertification({ browserName, executablePath 
       console.log(`  ${i} ${d.name}${d.reason ? ` — ${d.reason}` : ""}`);
     }
     console.log(`\nVerdict: ${results.fail === 0 ? "PASS" : "FAIL"}`);
-    process.exit(results.fail > 0 ? 1 : 0);
+    if (results.fail > 0) {
+      const error = new Error(`${browserName} functional certification failed`);
+      if (exitOnFailure) process.exit(1);
+      throw error;
+    }
+    if (exitOnFailure) process.exit(0);
+    return results;
   } catch (e) {
-    console.error("Fatal error during certification:", e);
-    console.error(e.stack);
+    if (exitOnFailure) {
+      console.error("Fatal error during certification:", e);
+      console.error(e.stack);
+    }
     try {
       if (ctx) await ctx.close();
     } catch (_e) {
@@ -445,6 +500,7 @@ export async function runRealBrowserCertification({ browserName, executablePath 
     } catch (_e) {
       void _e;
     }
-    process.exit(2);
+    if (exitOnFailure) process.exit(2);
+    throw e;
   }
 }

@@ -25,6 +25,9 @@ export class Tooltip {
   }
 
   private show(target: HTMLElement, text: string): void {
+    if (this.currentTarget && this.currentTarget !== target) {
+      this.currentTarget.removeAttribute("aria-describedby");
+    }
     this.currentTarget = target;
     this.el.textContent = text;
     this.el.classList.remove("hidden");

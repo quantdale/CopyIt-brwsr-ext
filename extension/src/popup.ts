@@ -3,14 +3,21 @@ import type { SnippetMeta, CategoryInfo } from "./protocol.js";
 import { AppState, initialState } from "./state.js";
 import { Tooltip } from "./tooltip.js";
 import { writeText } from "./clipboard.js";
-import { el, clearChildren, setHidden } from "./dom.js";
+import { clearChildren, createSnippetRow, el, setHidden, truncateUtf8 } from "./dom.js";
+import { showCopySuccess } from "./copy-feedback.js";
 
 const PAGE_SIZE = 100;
 const SEARCH_DEBOUNCE_MS = 120;
 
 const state: AppState = initialState();
 let generation = 0;
-let pendingCopyId: number | null = null;
+type PendingCopy = {
+  id: number;
+  button: HTMLButtonElement;
+  originalText: string;
+};
+
+let pendingCopy: PendingCopy | null = null;
 let client: NativeClient;
 let tooltip: Tooltip;
 
@@ -62,26 +69,13 @@ function renderList(): void {
   }
   setStatus(`${state.total} prompt${state.total === 1 ? "" : "s"}${state.hasMore ? " — scroll for more" : ""}`);
   for (const item of state.items) {
-    const row = el("div", "row");
-    row.tabIndex = 0;
-    row.setAttribute("role", "listitem");
-    row.setAttribute("aria-label", item.title);
-    const title = el("div", "row-title", item.title);
-    title.style.overflow = "hidden";
-    row.appendChild(title);
-    if (item.protected) {
-      const badge = el("span", "badge-protected", "Protected");
-      row.appendChild(badge);
-    }
-    const btn = el("button", "copy-btn") as HTMLButtonElement;
-    btn.type = "button";
-    btn.setAttribute("aria-label", `Copy ${item.title}`);
-    btn.textContent = "⧉";
-    btn.addEventListener("click", () => handleCopy(item.id, btn));
-    row.appendChild(btn);
+    const row = createSnippetRow(item, (button) => {
+      void handleCopy(item.id, button);
+    });
+    const title = row.querySelector(".row-title");
     if (item.description) {
       tooltip.attach(row, item.description);
-      tooltip.attach(title, item.description);
+      if (title instanceof HTMLElement) tooltip.attach(title, item.description);
     }
     els.list.appendChild(row);
   }
@@ -125,8 +119,8 @@ async function loadSnippets(reset = true): Promise<void> {
     if (gen !== generation) return;
     const items: SnippetMeta[] = (res.items ?? []).map((it) => ({
       id: it.id,
-      title: String(it.title ?? "").slice(0, 500),
-      description: String(it.description ?? "").slice(0, 2000),
+      title: truncateUtf8(String(it.title ?? ""), 500),
+      description: truncateUtf8(String(it.description ?? ""), 2000),
       category: String(it.category ?? ""),
       protected: Boolean(it.protected),
     }));
@@ -190,10 +184,14 @@ function hideOverlay(): void {
 }
 
 async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
-  if (pendingCopyId !== null) return;
-  pendingCopyId = id;
+  if (pendingCopy !== null) return;
+  const operation: PendingCopy = {
+    id,
+    button: btn,
+    originalText: btn.textContent ?? "⧉",
+  };
+  pendingCopy = operation;
   btn.disabled = true;
-  const original = btn.textContent;
   try {
     let body: string;
     try {
@@ -203,12 +201,9 @@ async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
       const err = e as Error & { code?: string };
       if (err.code === "vault_locked" || err.message?.includes("vault_locked")) {
         showOverlay("Unlock vault", "Enter password to copy this protected prompt.");
-        pendingCopyId = null;
         btn.disabled = false;
-        // Remember the pending copy so unlock can retry it
-        pendingCopyId = id;
-        // Store pending button for retry visual
-        (hideOverlay as unknown as { pendingBtn?: HTMLButtonElement }).pendingBtn = btn;
+        // Keep the explicit operation and button reference for the one retry
+        // after unlock. Do not rediscover it from user-visible label text.
         return;
       }
       throw e;
@@ -216,24 +211,20 @@ async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
     await writeText(body);
     // Drop body ref quickly
     body = "";
-    btn.textContent = "✓";
-    btn.classList.add("copied");
-    window.setTimeout(() => {
-      btn.textContent = original;
-      btn.classList.remove("copied");
-      btn.disabled = false;
-      pendingCopyId = null;
-    }, 850);
+    showCopySuccess(btn, operation.originalText, () => {
+      if (pendingCopy !== operation) return;
+      pendingCopy = null;
+    });
   } catch (e) {
     const err = e as Error;
     setStatus(err.message || "Copy failed", true);
     btn.disabled = false;
-    pendingCopyId = null;
+    if (pendingCopy === operation) pendingCopy = null;
   }
 }
 
 async function handleUnlock(): Promise<void> {
-  const password = els.vaultPassword.value;
+  let password = els.vaultPassword.value;
   if (!password) {
     els.vaultError.textContent = "Password required";
     els.vaultError.classList.remove("hidden");
@@ -247,17 +238,11 @@ async function handleUnlock(): Promise<void> {
     hideOverlay();
     state.vaultState = "unlocked";
     updateVaultUI();
-    if (pendingCopyId !== null) {
-      const id = pendingCopyId;
-      pendingCopyId = null;
-      // Retry the copy exactly once
-      const btn = document.querySelector(`button[aria-label="Copy ${CSS.escape(String(id))}"]`) as HTMLButtonElement | null;
-      // Fallback: just trigger via client; no button animation if not found
-      if (btn) await handleCopy(id, btn);
-      else {
-        const res = (await client.request("getSnippetBody", { id })) as { body: string };
-        await writeText(res.body ?? "");
-      }
+    const pending = pendingCopy;
+    pendingCopy = null;
+    if (pending) {
+      // Retry the original operation exactly once using its captured button.
+      await handleCopy(pending.id, pending.button);
     }
   } catch (e) {
     const err = e as Error & { code?: string };
@@ -267,7 +252,7 @@ async function handleUnlock(): Promise<void> {
     els.vaultPassword.select();
   } finally {
     els.vaultUnlock.disabled = false;
-    // Clear password variable
+    password = "";
   }
 }
 
@@ -286,12 +271,18 @@ function updateVaultUI(): void {
 }
 
 async function handleLock(): Promise<void> {
+  if (els.lockBtn.disabled) return;
+  els.lockBtn.disabled = true;
   try {
     await client.request("lockVault");
     state.vaultState = "locked";
     updateVaultUI();
   } catch {
-    // Best-effort lock; no user-visible failure is required.
+    // Keep the optimistic state unchanged and tell the user the host did not
+    // confirm the lock.
+    setStatus("Could not lock the vault. Try again.", true);
+  } finally {
+    els.lockBtn.disabled = false;
   }
 }
 
@@ -324,20 +315,20 @@ async function init(): Promise<void> {
   els.lockBtn.addEventListener("click", handleLock);
   els.vaultCancel.addEventListener("click", () => {
     hideOverlay();
-    pendingCopyId = null;
+    pendingCopy = null;
   });
   els.vaultUnlock.addEventListener("click", handleUnlock);
   els.vaultPassword.addEventListener("keydown", (e) => {
     if (e.key === "Enter") handleUnlock();
     if (e.key === "Escape") {
       hideOverlay();
-      pendingCopyId = null;
+      pendingCopy = null;
     }
   });
   els.overlay.addEventListener("click", (e) => {
     if (e.target === els.overlay) {
       hideOverlay();
-      pendingCopyId = null;
+      pendingCopy = null;
     }
   });
   document.addEventListener("keydown", (e) => {
@@ -376,4 +367,4 @@ if (document.readyState === "loading") document.addEventListener("DOMContentLoad
 else init();
 
 // Export for tests
-export { handleCopy, loadSnippets, setStatus };
+export { handleCopy, handleLock, handleUnlock, loadSnippets, setStatus };

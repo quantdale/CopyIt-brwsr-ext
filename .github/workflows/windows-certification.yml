@@ -12,13 +12,14 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master pinned 2026-08-28
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 22
+          node-version-file: .node-version
+          cache: npm
 
       - name: Install JS deps
         run: npm ci
@@ -62,17 +63,26 @@ jobs:
         timeout-minutes: 5
         run: node tests/real-edge-e2e.mjs
 
-      - name: Real Chrome E2E (deterministic fixture + protected vault)
+      - name: Chrome Stable install and origin verification
+        run: node tests/chrome-install-origin-verification.mjs
+
+      - name: Chromium functional equivalence (bundled executable)
+        timeout-minutes: 5
+        run: node tests/chromium-functional-e2e.mjs
+
+      - name: Chrome Stable real functional E2E (actual chrome.exe only)
         timeout-minutes: 5
         run: node tests/real-chrome-e2e.mjs
 
       - name: Uninstall / DB preservation check
+        if: always()
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1
           powershell -NoProfile -Command "if (-not (Test-Path \"$env:APPDATA\CopyIt\copyit.db\")) { throw \"DB was incorrectly deleted on uninstall\" }; Write-Host \"DB preserved after uninstall: $env:APPDATA\CopyIt\copyit.db\""
           powershell -NoProfile -Command "if (Test-Path \"HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Chrome registry not removed\" }; if (Test-Path \"HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Edge registry not removed\" }; Write-Host \"Registry clean after uninstall\""
 
-      - name: Reinstall + verify + smoke E2E
+      - name: Reinstall + verify + browser smoke E2E
+        if: always()
         timeout-minutes: 5
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1

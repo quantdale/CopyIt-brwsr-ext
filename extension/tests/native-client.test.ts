@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { NativeClient } from "../src/native-client.js";
 
-function fakePort() {
+type FakePort = chrome.runtime.Port & { fireDisconnect(): void };
+
+function fakePort(): FakePort {
   const listeners: Record<string, ((msg: unknown) => void)[]> = {};
   const disconnectListeners: (() => void)[] = [];
   return {
@@ -22,7 +24,8 @@ function fakePort() {
       addListener: vi.fn((cb: () => void) => disconnectListeners.push(cb)),
     },
     disconnect: vi.fn(),
-  } as unknown as chrome.runtime.Port;
+    fireDisconnect: () => disconnectListeners.forEach((cb) => cb()),
+  } as unknown as FakePort;
 }
 
 describe("NativeClient", () => {
@@ -38,15 +41,24 @@ describe("NativeClient", () => {
     await expect(client.request("ping")).rejects.toThrow(/not installed/);
   });
 
-  it("discards stale responses via generation (popup does)", async () => {
-    // This is a popup concern: generation counter ensures stale listSnippets responses are ignored.
-    // Here we just prove two concurrent requests both resolve with correct IDs.
-    const port = fakePort();
-    const client = new NativeClient({ connect: () => port, isAvailable: () => true });
-    const p1 = client.request("listSnippets", { query: "a" });
-    const p2 = client.request("listSnippets", { query: "b" });
-    await expect(p1).resolves.toBeDefined();
-    await expect(p2).resolves.toBeDefined();
+  it("rejects pending requests on disconnect and reconnects on the next request", async () => {
+    let port: FakePort | null = null;
+    let connects = 0;
+    const client = new NativeClient({
+      connect: () => {
+        connects += 1;
+        port = fakePort();
+        return port;
+      },
+      isAvailable: () => true,
+    });
+    const pending = client.request("ping", {}, 5000);
+    port!.fireDisconnect();
+    await expect(pending).rejects.toThrow("Native host disconnected");
+    expect(client.isConnected()).toBe(false);
+
+    await expect(client.request("ping")).resolves.toEqual({ ok: true });
+    expect(connects).toBe(2);
   });
 
   it("surfaces the error code from a failure envelope", async () => {

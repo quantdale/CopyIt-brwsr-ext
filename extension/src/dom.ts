@@ -14,6 +14,23 @@ export function setHidden(e: HTMLElement, hidden: boolean): void {
   e.setAttribute("aria-hidden", hidden ? "true" : "false");
 }
 
+/** Truncates at a UTF-8 byte boundary without splitting a Unicode scalar. */
+export function truncateUtf8(value: string, maxBytes: number): string {
+  if (value.length === 0 || maxBytes <= 0) return "";
+  const encoder = new TextEncoder();
+  if (encoder.encode(value).length <= maxBytes) return value;
+
+  let bytes = 0;
+  let result = "";
+  for (const character of value) {
+    const characterBytes = encoder.encode(character).length;
+    if (bytes + characterBytes > maxBytes) break;
+    result += character;
+    bytes += characterBytes;
+  }
+  return result;
+}
+
 export interface SnippetRowData {
   id: number;
   title: string;
@@ -22,22 +39,27 @@ export interface SnippetRowData {
   protected: boolean;
 }
 
-export function createSnippetRow(data: SnippetRowData): HTMLElement {
-  const row = el("div", "snippet-row");
-  row.classList.add("row");
+export function createSnippetRow(
+  data: SnippetRowData,
+  onCopy?: (button: HTMLButtonElement) => void,
+): HTMLElement {
+  const row = el("div", "row snippet-row");
+  row.tabIndex = 0;
   row.setAttribute("role", "listitem");
-  const title = el("div", "snippet-title", data.title);
-  title.dataset.description = data.description;
+  row.setAttribute("aria-label", data.title);
+  const title = el("div", "row-title snippet-title", data.title);
+  if (data.description) title.dataset.description = data.description;
   row.appendChild(title);
   if (data.protected) {
-    const lock = el("span", "lock-mark", "🔒");
-    lock.setAttribute("aria-label", "protected");
+    const lock = el("span", "badge-protected lock-mark", "Protected");
+    lock.setAttribute("aria-label", "Protected prompt");
     row.appendChild(lock);
   }
   const btn = el("button", "copy-btn") as HTMLButtonElement;
   btn.type = "button";
   btn.textContent = "⧉";
   btn.setAttribute("aria-label", `Copy ${data.title}`);
+  if (onCopy) btn.addEventListener("click", () => onCopy(btn));
   row.appendChild(btn);
   return row;
 }

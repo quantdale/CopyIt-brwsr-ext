@@ -52,36 +52,30 @@ function findFixtureBin() {
  * @returns {{ tmpDir: string, dataDir: string, dbPath: string, cleanup: () => void }}
  */
 export function createCertFixture() {
-  const isCI = !!process.env.CI;
-  // On CI the release host ignores COPYIT_DATA_DIR and only respects APPDATA.
-  // Use the real APPDATA/CopyIt path so the release host finds the fixture
-  // without relying on env forwarding through Playwright's Chromium.
-  if (isCI) {
-    const realAppData = process.env.APPDATA;
-    if (!realAppData) throw new Error("APPDATA not set on CI");
-    const bin = findFixtureBin();
-    // cert_fixture expects the APPDATA root (e.g. .../Roaming) and creates Roaming/CopyIt/copyit.db
-    execFileSync(bin, [realAppData], { stdio: "inherit" });
-    const dataDir = join(realAppData, "CopyIt");
-    const dbPath = join(dataDir, "copyit.db");
-    if (!existsSync(dbPath)) throw new Error(`fixture DB not created at ${dbPath} (CI)`);
-    return {
-      tmpDir: realAppData,
-      dataDir,
-      dbPath,
-      password: CERT_PASSWORD,
-      protectedBody: CERT_PROTECTED_BODY,
-      cleanup() {
-        // CI runner is ephemeral; no cleanup needed (avoid deleting real APPDATA).
-      },
-    };
-  }
   const tmpDir = mkdtempSync(join(tmpdir(), "copyit-cert-fixture-"));
-  const bin = findFixtureBin();
-  execFileSync(bin, [tmpDir], { stdio: "inherit" });
+  let bin;
+  try {
+    bin = findFixtureBin();
+  } catch (error) {
+    rmSync(tmpDir, { recursive: true, force: true });
+    throw error;
+  }
+  if (!bin) {
+    rmSync(tmpDir, { recursive: true, force: true });
+    throw new Error("cert_fixture binary is unavailable");
+  }
+  try {
+    execFileSync(bin, [tmpDir], { stdio: "inherit" });
+  } catch (error) {
+    rmSync(tmpDir, { recursive: true, force: true });
+    throw error;
+  }
   const dataDir = join(tmpDir, "CopyIt");
   const dbPath = join(dataDir, "copyit.db");
-  if (!existsSync(dbPath)) throw new Error(`fixture DB not created at ${dbPath}`);
+  if (!existsSync(dbPath)) {
+    rmSync(tmpDir, { recursive: true, force: true });
+    throw new Error(`fixture DB not created at ${dbPath}`);
+  }
   return {
     tmpDir,
     dataDir,

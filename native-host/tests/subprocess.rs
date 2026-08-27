@@ -244,6 +244,36 @@ fn full_v1_journey_over_real_framing() {
 }
 
 #[test]
+fn host_observes_empty_canonical_library_after_clear_all() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("appdata").join("CopyIt");
+    let log_dir = tmp.path().join("logs");
+    build_fixture(&data_dir);
+
+    // Establish the canonical database through the real native-host path.
+    let mut host = HostProcess::spawn(&data_dir, &log_dir);
+    let hello = host.request("hello", "clear-h1", json!({}));
+    assert_eq!(hello["result"]["dbReady"], true);
+    let before = host.request("listSnippets", "clear-before", json!({}));
+    assert_eq!(before["result"]["total"], 2);
+    drop(host);
+
+    // This is the shared SQLite effect of the desktop's clear-all
+    // reconciliation. Keep the operation in the test explicit so the
+    // follow-up host process proves it reads the same canonical rows rather
+    // than a browser-owned cache or a legacy JSON source.
+    let db = rusqlite::Connection::open(data_dir.join("copyit.db")).unwrap();
+    db.execute("DELETE FROM snippets", []).unwrap();
+    drop(db);
+
+    let mut host = HostProcess::spawn(&data_dir, &log_dir);
+    let after = host.request("listSnippets", "clear-after", json!({}));
+    assert_eq!(after["ok"], true);
+    assert_eq!(after["result"]["total"], 0);
+    assert!(after["result"]["items"].as_array().unwrap().is_empty());
+}
+
+#[test]
 fn host_rejects_wrong_origin_argument() {
     let tmp = tempfile::tempdir().unwrap();
     let data_dir = tmp.path().join("appdata");

@@ -1,19 +1,28 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { showCopySuccess } from "../src/copy-feedback.js";
+import { truncateUtf8 } from "../src/dom.js";
 
 describe("popup copy flow", () => {
-  it("shows checkmark for ~850ms after copy (mocked)", async () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("uses the production copy feedback helper and resets after its duration", () => {
     const btn = document.createElement("button");
     btn.textContent = "⧉";
-    const original = btn.textContent;
-    btn.textContent = "✓";
-    btn.classList.add("copied");
+    const reset = vi.fn();
+    showCopySuccess(btn, "⧉", reset);
     expect(btn.textContent).toBe("✓");
     expect(btn.classList.contains("copied")).toBe(true);
-    // simulate timeout restore
-    await new Promise((r) => setTimeout(r, 10));
-    btn.textContent = original;
-    btn.classList.remove("copied");
+    vi.advanceTimersByTime(849);
+    expect(btn.textContent).toBe("✓");
+    vi.advanceTimersByTime(1);
     expect(btn.textContent).toBe("⧉");
+    expect(btn.classList.contains("copied")).toBe(false);
+    expect(reset).toHaveBeenCalledOnce();
   });
 
   it("renders safe text via textContent (no innerHTML)", () => {
@@ -27,20 +36,9 @@ describe("popup copy flow", () => {
 });
 
 describe("popup search/category", () => {
-  it("debounces search and resets pagination", () => {
-    let gen = 0;
-    let current = 0;
-    const shouldDiscard = (g: number, c: number) => g !== c;
-    gen++;
-    current = gen;
-    expect(shouldDiscard(gen - 1, current)).toBe(true);
-    expect(shouldDiscard(current, current)).toBe(false);
-  });
-
-  it("caps limit at 200 and truncates description at 2000 bytes", () => {
-    const limit = Math.min(100000, 200);
-    expect(limit).toBe(200);
-    const desc = "a".repeat(5000).slice(0, 2000);
-    expect(desc.length).toBe(2000);
+  it("normalizes metadata with production UTF-8 truncation", () => {
+    const description = truncateUtf8("🙂".repeat(1000), 2000);
+    expect(new TextEncoder().encode(description).length).toBeLessThanOrEqual(2000);
+    expect(description.endsWith("🙂")).toBe(true);
   });
 });

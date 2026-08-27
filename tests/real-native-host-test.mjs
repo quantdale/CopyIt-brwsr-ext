@@ -83,6 +83,33 @@ function readResponse(proc, timeoutMs = 15000) {
   });
 }
 
+function waitForExit(proc, timeoutMs = 5000) {
+  if (proc.exitCode !== null || proc.signalCode !== null) {
+    return Promise.resolve({ code: proc.exitCode, signal: proc.signalCode });
+  }
+  return new Promise((resolve) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (!settled) {
+        settled = true;
+        resolve(null);
+      }
+    }, timeoutMs);
+    proc.once("exit", (code, signal) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code, signal });
+    });
+    proc.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({ code: null, signal: null, error: error.message });
+    });
+  });
+}
+
 let requestCounter = 0;
 function makeRequest(method, params = {}) {
   return {
@@ -318,7 +345,7 @@ async function main() {
         const body = bodyRes.result?.body || "";
         console.log(`  Snippet #${plaintextSnippet.id} "${plaintextSnippet.title}"`);
         console.log(`  Body length: ${body.length} chars`);
-        console.log(`  Body (first 120): "${body.substring(0, 120)}"`);
+        console.log(`  Body was returned without logging its contents (${body.length} chars)`);
         if (body.length > 0) {
           pass(`protocol:getBody-plaintext — ${body.length} chars`);
         } else {
@@ -344,8 +371,7 @@ async function main() {
       const protRes = await readResponse(proc);
       if (!protRes.ok && protRes.error?.code === "vault_locked") {
         pass("protocol:vault-locked — vault_locked error for protected snippet");
-        console.log(`  Error message: "${protRes.error.message}"`);
-        console.log(`  Retryable: ${protRes.error.retryable}`);
+        console.log(`  Retryable response: ${Boolean(protRes.error.retryable)}`);
       } else if (protRes.ok) {
         skip("protocol:vault-locked", "Vault was already unlocked");
       } else {
@@ -362,7 +388,6 @@ async function main() {
       const wrongPw = await readResponse(proc, 30000); // KDF can be slow
       if (!wrongPw.ok && wrongPw.error?.code === "invalid_password") {
         pass("protocol:wrong-password — safe error returned");
-        console.log(`  Error: "${wrongPw.error.message}"`);
       } else if (wrongPw.ok) {
         fail("protocol:wrong-password", "Unlock succeeded with wrong password!");
       } else {
@@ -460,7 +485,17 @@ async function main() {
 
   // === Cleanup ===
   proc.stdin.end();
-  proc.kill();
+  const normalExit = await waitForExit(proc);
+  if (normalExit === null) {
+    fail("host:clean-shutdown", "host did not exit after stdin closed");
+    proc.kill();
+  } else if (normalExit.error) {
+    fail("host:clean-shutdown", normalExit.error);
+  } else if (normalExit.signal !== null || normalExit.code !== 0) {
+    fail("host:clean-shutdown", `unexpected exit outcome: ${JSON.stringify(normalExit)}`);
+  } else {
+    pass("host:clean-shutdown — clean EOF shutdown observed");
+  }
 
   // === 15. Wrong origin rejection ===
   console.log("\n--- 15. Origin Rejection ---");
@@ -469,24 +504,20 @@ async function main() {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 5000,
     });
-    let badExit = null;
-    badProc.on("exit", (code) => (badExit = code));
-    await new Promise((r) => setTimeout(r, 1000));
-    if (badExit !== null && badExit !== 0) {
-      pass(`protocol:origin-rejection — exit code ${badExit} for wrong origin`);
-    } else {
-      // Try sending a message
-      sendMessage(badProc, makeRequest("hello"));
-      try {
-        await readResponse(badProc, 3000);
-        fail("protocol:origin-rejection", "Should have rejected wrong origin");
-      } catch {
-        pass("protocol:origin-rejection — no response to wrong origin");
-      }
+    badProc.stdin.end();
+    const badOutcome = await waitForExit(badProc, 3000);
+    if (badOutcome && badOutcome.error) {
+      fail("protocol:origin-rejection", badOutcome.error);
+    } else if (badOutcome && badOutcome.signal === null && badOutcome.code === 2) {
+      pass("protocol:origin-rejection — exit code 2 for wrong origin");
+    } else if (badOutcome === null) {
+      fail("protocol:origin-rejection", "host remained alive after wrong origin");
       badProc.kill();
+    } else {
+      fail("protocol:origin-rejection", `unexpected exit outcome: ${JSON.stringify(badOutcome)}`);
     }
   } catch (e) {
-    pass(`protocol:origin-rejection — ${e.message}`);
+    fail("protocol:origin-rejection", e.message);
   }
 
   // === Summary ===

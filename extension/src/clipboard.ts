@@ -15,5 +15,3 @@ export async function writeText(text: string): Promise<void> {
   ta.remove();
   if (!ok) throw new Error("Clipboard write failed");
 }
-
-export function clearAfterDelay(): void {}

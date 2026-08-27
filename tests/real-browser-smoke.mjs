@@ -14,7 +14,10 @@ const EXPECTED_ID = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
 const EDGE_PATH = "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
 const EDGE_PATH2 = "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe";
 const exe = existsSync(EDGE_PATH) ? EDGE_PATH : existsSync(EDGE_PATH2) ? EDGE_PATH2 : null;
-if (!exe) { console.error("Edge not found, skipping smoke"); process.exit(0); }
+if (!exe) {
+  console.log("REAL_USER_DB_SMOKE: NOT-RUN / ENVIRONMENT-BLOCKED — Edge Stable executable not found (optional smoke).");
+  process.exit(0);
+}
 
 const userDir = mkdtempSync(join(tmpdir(), "copyit-smoke-"));
 const ctx = await chromium.launchPersistentContext(userDir, {
