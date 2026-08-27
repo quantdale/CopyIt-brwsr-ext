@@ -59,10 +59,8 @@ export async function runRealBrowserCertification({ browserName, executablePath 
   const userDir = mkdtempSync(pathJoin(tmpdir(), `copyit-${browserName.toLowerCase()}-cert-`));
   console.log(`Browser userDir: ${userDir}`);
 
-  const isolatedEnv = {
-    APPDATA: fixture.tmpDir,
-    LOCALAPPDATA: fixture.tmpDir,
-  };
+  const isCI = !!process.env.CI;
+  const isolatedEnv = isCI ? {} : { APPDATA: fixture.tmpDir, LOCALAPPDATA: fixture.tmpDir };
   const launchEnv = { ...process.env, ...isolatedEnv };
 
   const results = { pass: 0, fail: 0, details: [] };
@@ -74,7 +72,6 @@ export async function runRealBrowserCertification({ browserName, executablePath 
   let ctx;
   try {
     console.log(`\nLaunching ${browserName}...`);
-    const isCI = !!process.env.CI;
     ctx = await chromium.launchPersistentContext(userDir, {
       headless: isCI,
       executablePath,
