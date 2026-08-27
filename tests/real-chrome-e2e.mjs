@@ -58,7 +58,6 @@ if (process.env.CI) {
     console.error("FATAL: manifest missing key");
     process.exit(1);
   }
-  const { execSync: _exec } = await import("node:child_process");
   console.log(`Chrome binary verified: ${realChromeExe}`);
   console.log(`Extension ID matches manifest key (deterministic).`);
   console.log("CHROME REAL E2E CERTIFICATION SUMMARY: PASS (lightweight CI)");
