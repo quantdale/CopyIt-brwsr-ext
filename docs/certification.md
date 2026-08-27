@@ -3,7 +3,7 @@
 **Date:** 2026-08-27  
 **Repository:** `quantdale/CopyIt-brwsr-ext`  
 **Branch:** `main`  
-**Final SHA:** `8c22ab424c4088bfe8edb6e2f0b104926bac782f` → *updated after certification closure*  
+**Final SHA:** `f1c8f0ff909e5a16f8d9e142a6a1d59d514450ae`
 **Release Decision:** **READY**
 
 ---
