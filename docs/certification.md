@@ -144,7 +144,7 @@ This section records the final coordinated commits and their truthful evidence:
 
 ```text
 Extension branch: `feature/copyit-v1-completion-20260828`
-Extension final commit: `cdd376743a1ebc555d11f8b38ee8c152d58ab387`
+Extension final commit: `fb768343294456f864f1493f001d95bc4052822d`
 Desktop branch: `feature/copyit-v1-completion-20260828`
 Desktop final commit: `c36e138ce7a6153906347699384ec901369fc5b8`
 Final decision: NOT CERTIFIED — Chrome Stable functional/manual evidence unavailable

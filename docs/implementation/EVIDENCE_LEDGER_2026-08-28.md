@@ -126,4 +126,4 @@ for this evidence set is **NOT CERTIFIED** pending a real Chrome functional or
 manual acceptance record.
 
 Final desktop SHA: `c36e138ce7a6153906347699384ec901369fc5b8`.
-Final extension SHA: `cdd376743a1ebc555d11f8b38ee8c152d58ab387`.
+Final extension implementation SHA: `fb768343294456f864f1493f001d95bc4052822d`.
