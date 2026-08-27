@@ -127,9 +127,9 @@ impl MigrationError {
             MigrationError::LegacyCorrupt { .. } => ErrorCode::LegacyDataCorrupt,
             MigrationError::Db(db_err) => db_err.error_code(),
             MigrationError::LockTimeout => ErrorCode::MigrationInProgress,
-            MigrationError::Sqlite(_)
-            | MigrationError::Io(_)
-            | MigrationError::Verification(_) => ErrorCode::MigrationFailed,
+            MigrationError::Sqlite(_) | MigrationError::Io(_) | MigrationError::Verification(_) => {
+                ErrorCode::MigrationFailed
+            }
         }
     }
 }
@@ -238,7 +238,10 @@ pub enum MigrationOutcome {
     /// Database already existed and validated; JSON was not touched.
     AlreadyCanonical { schema_version: i64 },
     /// Valid legacy JSON imported, verified, installed, sources backed up.
-    Migrated { snippets: usize, backups: Vec<BackupOutcome> },
+    Migrated {
+        snippets: usize,
+        backups: Vec<BackupOutcome>,
+    },
     /// No user data found anywhere; fresh seeded library created.
     FreshSeeded { snippets: usize },
 }
@@ -272,7 +275,12 @@ pub fn ensure_canonical_db(
     if path.exists() {
         let conn = db::open_existing(&path)?;
         let version = db::schema_version(&conn)?;
-        return Ok((conn, MigrationOutcome::AlreadyCanonical { schema_version: version }));
+        return Ok((
+            conn,
+            MigrationOutcome::AlreadyCanonical {
+                schema_version: version,
+            },
+        ));
     }
 
     let _lock = MigrationLock::acquire(data_dir)?;
@@ -281,21 +289,32 @@ pub fn ensure_canonical_db(
     if path.exists() {
         let conn = db::open_existing(&path)?;
         let version = db::schema_version(&conn)?;
-        return Ok((conn, MigrationOutcome::AlreadyCanonical { schema_version: version }));
+        return Ok((
+            conn,
+            MigrationOutcome::AlreadyCanonical {
+                schema_version: version,
+            },
+        ));
     }
 
     let snippets_src = legacy::read_source::<Vec<LegacySnippet>>(&data_dir.join("snippets.json"));
     let config_src = legacy::read_source::<LegacyConfig>(&data_dir.join("config.json"));
 
     if let SourceLoad::Corrupt(reason) = &snippets_src {
-        return Err(MigrationError::LegacyCorrupt { file: "snippets.json", reason: reason.clone() });
+        return Err(MigrationError::LegacyCorrupt {
+            file: "snippets.json",
+            reason: reason.clone(),
+        });
     }
     if let SourceLoad::Corrupt(reason) = &config_src {
-        return Err(MigrationError::LegacyCorrupt { file: "config.json", reason: reason.clone() });
+        return Err(MigrationError::LegacyCorrupt {
+            file: "config.json",
+            reason: reason.clone(),
+        });
     }
 
-    let has_user_data =
-        matches!(&snippets_src, SourceLoad::Loaded(_)) || matches!(&config_src, SourceLoad::Loaded(_));
+    let has_user_data = matches!(&snippets_src, SourceLoad::Loaded(_))
+        || matches!(&config_src, SourceLoad::Loaded(_));
 
     let (snippets, mut config) = if has_user_data {
         let snippets = match &snippets_src {
@@ -308,13 +327,24 @@ pub fn ensure_canonical_db(
         };
         (snippets, cfg)
     } else {
-        (default_seed(), LegacyConfig { categories: vec!["Git".into(), "Prompt".into()], theme: "Dark".into(), vault: None })
+        (
+            default_seed(),
+            LegacyConfig {
+                categories: vec!["Git".into(), "Prompt".into()],
+                theme: "Dark".into(),
+                vault: None,
+            },
+        )
     };
     if config.theme.is_empty() {
         config.theme = "Dark".to_string();
     }
 
-    let outcome_kind = if has_user_data { "migrated" } else { "fresh-seeded" };
+    let outcome_kind = if has_user_data {
+        "migrated"
+    } else {
+        "fresh-seeded"
+    };
     let snippets_hash = match &snippets_src {
         SourceLoad::Loaded(_) => hash_file(&data_dir.join("snippets.json")),
         SourceLoad::Missing => "none".to_string(),
@@ -330,27 +360,38 @@ pub fn ensure_canonical_db(
     let tmp_path = data_dir.join(format!("copyit.db.migrating.{}", std::process::id()));
     let _ = std::fs::remove_file(&tmp_path);
 
-    build_and_install(&tmp_path, &path, &snippets, &config, &[
-        ("migrated_at", &utc_now_iso()),
-        ("source_snippets_sha256", &snippets_hash),
-        ("source_config_sha256", &config_hash),
-        ("source_kind", outcome_kind),
-    ])?;
+    build_and_install(
+        &tmp_path,
+        &path,
+        &snippets,
+        &config,
+        &[
+            ("migrated_at", &utc_now_iso()),
+            ("source_snippets_sha256", &snippets_hash),
+            ("source_config_sha256", &config_hash),
+            ("source_kind", outcome_kind),
+        ],
+    )?;
 
     // Reopen canonical with WAL and verify once more.
     let conn = db::open_existing(&path)?;
 
     let backups = if has_user_data {
-        backup_legacy_files(data_dir)
+        backup_legacy_files(data_dir, now_secs())
     } else {
         Vec::new()
     };
     sweep_stale_temp_migrations(data_dir);
 
     let outcome = if has_user_data {
-        MigrationOutcome::Migrated { snippets: snippets.len(), backups }
+        MigrationOutcome::Migrated {
+            snippets: snippets.len(),
+            backups,
+        }
     } else {
-        MigrationOutcome::FreshSeeded { snippets: snippets.len() }
+        MigrationOutcome::FreshSeeded {
+            snippets: snippets.len(),
+        }
     };
     Ok((conn, outcome))
 }
@@ -382,52 +423,66 @@ fn build_and_install(
     let now = utc_now_iso();
 
     conn.execute_batch("BEGIN IMMEDIATE")?;
-    let result = (|| -> Result<(), MigrationError> {
-        // Canonical category list: sanitized config categories unioned with
-        // every snippet category (mirrors the desktop's add_categories pass).
-        let mut cat_source: Vec<String> = config.categories.clone();
-        for s in snippets {
-            cat_source.push(s.category.clone());
-        }
-        let categories = sanitize_categories(&cat_source);
-        for (order, name) in categories.iter().enumerate() {
-            conn.execute(
-                "INSERT INTO categories (name, sort_order) VALUES (?1, ?2)",
-                rusqlite::params![name, order as i64],
-            )?;
-        }
+    let result =
+        (|| -> Result<(), MigrationError> {
+            // Canonical category list: sanitized config categories unioned with
+            // every snippet category (mirrors the desktop's add_categories pass).
+            let mut cat_source: Vec<String> = config.categories.clone();
+            for s in snippets {
+                cat_source.push(s.category.clone());
+            }
+            let categories = sanitize_categories(&cat_source);
+            for (order, name) in categories.iter().enumerate() {
+                conn.execute(
+                    "INSERT INTO categories (name, sort_order) VALUES (?1, ?2)",
+                    rusqlite::params![name, order as i64],
+                )?;
+            }
 
-        for (sort_order, s) in snippets.iter().enumerate() {
-            let protected = s.protection.as_ref();
-            let (hint, nonce, ct): (Option<&str>, Option<&str>, Option<&str>) = match protected {
-                Some(p) => (Some(p.hint.as_str()), Some(p.nonce.as_str()), Some(p.ciphertext.as_str())),
-                None => (None, None, None),
-            };
-            conn.execute(
-                "INSERT INTO snippets
+            for (sort_order, s) in snippets.iter().enumerate() {
+                let protected = s.protection.as_ref();
+                let (hint, nonce, ct): (Option<&str>, Option<&str>, Option<&str>) = match protected
+                {
+                    Some(p) => (
+                        Some(p.hint.as_str()),
+                        Some(p.nonce.as_str()),
+                        Some(p.ciphertext.as_str()),
+                    ),
+                    None => (None, None, None),
+                };
+                conn.execute(
+                    "INSERT INTO snippets
                     (id, title, description, category, body,
                      protection_hint, protection_nonce, protection_ciphertext,
                      sort_order, created_at, updated_at)
                  VALUES (?1, ?2, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)",
-                rusqlite::params![
-                    s.id as i64,
-                    s.title,
-                    canonical_category(&s.category),
-                    if protected.is_some() { "" } else { s.body.as_str() },
-                    hint,
-                    nonce,
-                    ct,
-                    sort_order as i64,
-                    now,
-                ],
-            )?;
-        }
+                    rusqlite::params![
+                        s.id as i64,
+                        s.title,
+                        canonical_category(&s.category),
+                        if protected.is_some() {
+                            ""
+                        } else {
+                            s.body.as_str()
+                        },
+                        hint,
+                        nonce,
+                        ct,
+                        sort_order as i64,
+                        now,
+                    ],
+                )?;
+            }
 
-        let vault_params: (Option<&str>, Option<&str>, Option<&str>) = match &config.vault {
-            Some(v) => (Some(v.salt.as_str()), Some(v.nonce.as_str()), Some(v.canary.as_str())),
-            None => (None, None, None),
-        };
-        conn.execute(
+            let vault_params: (Option<&str>, Option<&str>, Option<&str>) = match &config.vault {
+                Some(v) => (
+                    Some(v.salt.as_str()),
+                    Some(v.nonce.as_str()),
+                    Some(v.canary.as_str()),
+                ),
+                None => (None, None, None),
+            };
+            conn.execute(
             "INSERT INTO app_config (singleton_id, theme, vault_salt, vault_nonce, vault_canary)
              VALUES (1, ?1, ?2, ?3, ?4)",
             rusqlite::params![
@@ -438,13 +493,13 @@ fn build_and_install(
             ],
         )?;
 
-        for (key, value) in meta_rows {
-            db::set_migration_meta(&conn, key, value)?;
-        }
+            for (key, value) in meta_rows {
+                db::set_migration_meta(&conn, key, value)?;
+            }
 
-        verify_imported(&conn, snippets, config)?;
-        Ok(())
-    })();
+            verify_imported(&conn, snippets, config)?;
+            Ok(())
+        })();
     match result {
         Ok(()) => conn.execute_batch("COMMIT")?,
         Err(e) => {
@@ -505,15 +560,24 @@ fn verify_imported(
 
         let protected = s.protection.as_ref();
         if row.0 != s.title {
-            return Err(MigrationError::Verification(format!("id {}: title mismatch", s.id)));
+            return Err(MigrationError::Verification(format!(
+                "id {}: title mismatch",
+                s.id
+            )));
         }
         if row.2 != canonical_category(&s.category) {
-            return Err(MigrationError::Verification(format!("id {}: category mismatch", s.id)));
+            return Err(MigrationError::Verification(format!(
+                "id {}: category mismatch",
+                s.id
+            )));
         }
         match protected {
             Some(p) => {
                 if !row.3.is_empty() {
-                    return Err(MigrationError::Verification(format!("id {}: protected body must be empty", s.id)));
+                    return Err(MigrationError::Verification(format!(
+                        "id {}: protected body must be empty",
+                        s.id
+                    )));
                 }
                 if row.4.as_deref() != Some(p.hint.as_str())
                     || row.5.as_deref() != Some(p.nonce.as_str())
@@ -527,7 +591,10 @@ fn verify_imported(
             }
             None => {
                 if row.3 != s.body {
-                    return Err(MigrationError::Verification(format!("id {}: body mismatch", s.id)));
+                    return Err(MigrationError::Verification(format!(
+                        "id {}: body mismatch",
+                        s.id
+                    )));
                 }
                 if row.4.is_some() || row.5.is_some() || row.6.is_some() {
                     return Err(MigrationError::Verification(format!(
@@ -554,11 +621,14 @@ fn verify_imported(
     let mut expected_sorted = expected_categories.clone();
     expected_sorted.sort();
     if stored != expected_sorted {
-        return Err(MigrationError::Verification("category set mismatch".to_string()));
+        return Err(MigrationError::Verification(
+            "category set mismatch".to_string(),
+        ));
     }
 
     // Theme + vault metadata exactness.
-    let cfg = db::load_config(conn)?.ok_or_else(|| MigrationError::Verification("missing app_config row".into()))?;
+    let cfg = db::load_config(conn)?
+        .ok_or_else(|| MigrationError::Verification("missing app_config row".into()))?;
     if cfg.theme != config.theme && !(config.theme.trim().is_empty() && cfg.theme == "Dark") {
         return Err(MigrationError::Verification("theme mismatch".to_string()));
     }
@@ -566,10 +636,16 @@ fn verify_imported(
         (None, None) => {}
         (Some(want), Some(got)) => {
             if want.salt != got.salt || want.nonce != got.nonce || want.canary != got.canary {
-                return Err(MigrationError::Verification("vault metadata mismatch".to_string()));
+                return Err(MigrationError::Verification(
+                    "vault metadata mismatch".to_string(),
+                ));
             }
         }
-        _ => return Err(MigrationError::Verification("vault presence mismatch".to_string())),
+        _ => {
+            return Err(MigrationError::Verification(
+                "vault presence mismatch".to_string(),
+            ))
+        }
     }
 
     db::verify_lightweight(conn)?;
@@ -578,13 +654,17 @@ fn verify_imported(
 
 /// Renames legacy JSON sources to uniquely named backups. Never deletes them;
 /// failures are reported, not fatal (the verified DB stays canonical).
-fn backup_legacy_files(data_dir: &Path) -> Vec<BackupOutcome> {
-    let ts = backup_timestamp(now_secs());
+fn backup_legacy_files(data_dir: &Path, now_secs_value: u64) -> Vec<BackupOutcome> {
+    let ts = backup_timestamp(now_secs_value);
     let mut out = Vec::new();
     for name in ["snippets.json", "config.json"] {
         let src = data_dir.join(name);
         if !src.exists() {
-            out.push(BackupOutcome { file: name.into(), status: "absent".into(), backup_path: None });
+            out.push(BackupOutcome {
+                file: name.into(),
+                status: "absent".into(),
+                backup_path: None,
+            });
             continue;
         }
         match unique_backup_path(data_dir, name, &ts) {
@@ -596,10 +676,18 @@ fn backup_legacy_files(data_dir: &Path) -> Vec<BackupOutcome> {
                 }),
                 Err(_) => {
                     // Do NOT delete or overwrite the JSON; report the warning.
-                    out.push(BackupOutcome { file: name.into(), status: "backup-failed".into(), backup_path: None })
+                    out.push(BackupOutcome {
+                        file: name.into(),
+                        status: "backup-failed".into(),
+                        backup_path: None,
+                    })
                 }
             },
-            None => out.push(BackupOutcome { file: name.into(), status: "backup-failed".into(), backup_path: None }),
+            None => out.push(BackupOutcome {
+                file: name.into(),
+                status: "backup-failed".into(),
+                backup_path: None,
+            }),
         }
     }
     out
@@ -645,7 +733,10 @@ mod tests {
     }
 
     fn snippet_json(id: u64, title: &str, cat: &str, body: &str) -> String {
-        format!(r#"{{"id":{id},"title":"{title}","category":"{cat}","body":"{}"}}"#, body.replace('"', "\\\""))
+        format!(
+            r#"{{"id":{id},"title":"{title}","category":"{cat}","body":"{}"}}"#,
+            body.replace('"', "\\\"")
+        )
     }
 
     #[test]
@@ -664,7 +755,9 @@ mod tests {
 
         let (ids, titles): (Vec<i64>, Vec<String>) = {
             let conn = db::open_existing(&db_path(dir.path())).unwrap();
-            let mut stmt = conn.prepare("SELECT id, title FROM snippets ORDER BY sort_order").unwrap();
+            let mut stmt = conn
+                .prepare("SELECT id, title FROM snippets ORDER BY sort_order")
+                .unwrap();
             let rows: Vec<(i64, String)> = stmt
                 .query_map([], |r| Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?)))
                 .unwrap()
@@ -683,7 +776,10 @@ mod tests {
         // Leave a poisoned legacy file behind: it must be ignored entirely.
         write(&dir.path().join("snippets.json"), "garbage");
         let (_conn, outcome) = ensure_canonical_db(dir.path()).unwrap();
-        assert!(matches!(outcome, MigrationOutcome::AlreadyCanonical { schema_version: 1 }));
+        assert!(matches!(
+            outcome,
+            MigrationOutcome::AlreadyCanonical { schema_version: 1 }
+        ));
     }
 
     #[test]
@@ -702,22 +798,44 @@ mod tests {
         );
 
         let (conn, outcome) = ensure_canonical_db(d).unwrap();
-        let MigrationOutcome::Migrated { snippets: 2, backups } = outcome else {
+        let MigrationOutcome::Migrated {
+            snippets: 2,
+            backups,
+        } = outcome
+        else {
             panic!("expected migrated, got {outcome:?}");
         };
-        assert!(backups.iter().any(|b| b.file == "snippets.json" && b.status == "backed-up"));
-        assert!(backups.iter().any(|b| b.file == "config.json" && b.status == "backed-up"));
+        assert!(backups
+            .iter()
+            .any(|b| b.file == "snippets.json" && b.status == "backed-up"));
+        assert!(backups
+            .iter()
+            .any(|b| b.file == "config.json" && b.status == "backed-up"));
 
         // IDs preserved exactly; array order becomes sort_order.
-        let mut stmt = conn.prepare("SELECT id, title, category FROM snippets ORDER BY sort_order").unwrap();
+        let mut stmt = conn
+            .prepare("SELECT id, title, category FROM snippets ORDER BY sort_order")
+            .unwrap();
         let rows: Vec<(i64, String, String)> = stmt
             .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
             .unwrap()
             .collect::<Result<Vec<_>, _>>()
             .unwrap();
-        assert_eq!(rows, vec![(42, "Second".into(), "Prompt".into()), (7, "First".into(), "Git".into())]);
+        assert_eq!(
+            rows,
+            vec![
+                (42, "Second".into(), "Prompt".into()),
+                (7, "First".into(), "Git".into())
+            ]
+        );
 
-        let theme: String = conn.query_row("SELECT theme FROM app_config WHERE singleton_id=1", [], |r| r.get(0)).unwrap();
+        let theme: String = conn
+            .query_row(
+                "SELECT theme FROM app_config WHERE singleton_id=1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
         assert_eq!(theme, "Nord");
 
         // Sources renamed away, originals gone, backups exist.
@@ -743,7 +861,10 @@ mod tests {
         }])
         .to_string();
         write(&d.join("snippets.json"), &json);
-        write(&d.join("config.json"), r#"{"categories":["prompt"],"theme":"Dark"}"#);
+        write(
+            &d.join("config.json"),
+            r#"{"categories":["prompt"],"theme":"Dark"}"#,
+        );
 
         let (conn, _) = ensure_canonical_db(d).unwrap();
         let (body, hint, nonce, ct): (String, Option<String>, Option<String>, Option<String>) = conn
@@ -767,11 +888,20 @@ mod tests {
         write(&d.join("config.json"), r#"{"theme":"Nord"}"#);
 
         let err = ensure_canonical_db(d).unwrap_err();
-        assert!(matches!(err, MigrationError::LegacyCorrupt { file: "snippets.json", .. }));
+        assert!(matches!(
+            err,
+            MigrationError::LegacyCorrupt {
+                file: "snippets.json",
+                ..
+            }
+        ));
 
         // Nothing was created or destroyed.
         assert!(!d.join("copyit.db").exists());
-        assert_eq!(std::fs::read_to_string(d.join("snippets.json")).unwrap(), "this is definitely not json");
+        assert_eq!(
+            std::fs::read_to_string(d.join("snippets.json")).unwrap(),
+            "this is definitely not json"
+        );
         assert!(!d.join("snippets.json.corrupt").exists());
     }
 
@@ -783,7 +913,10 @@ mod tests {
         write(&d.join("config.json"), "{oops");
         assert!(matches!(
             ensure_canonical_db(d),
-            Err(MigrationError::LegacyCorrupt { file: "config.json", .. })
+            Err(MigrationError::LegacyCorrupt {
+                file: "config.json",
+                ..
+            })
         ));
     }
 
@@ -793,8 +926,13 @@ mod tests {
         let d = dir.path();
         write(&d.join("snippets.json"), "[]");
         let (conn, outcome) = ensure_canonical_db(d).unwrap();
-        assert!(matches!(outcome, MigrationOutcome::Migrated { snippets: 0, .. }));
-        let count: i64 = conn.query_row("SELECT COUNT(*) FROM snippets", [], |r| r.get(0)).unwrap();
+        assert!(matches!(
+            outcome,
+            MigrationOutcome::Migrated { snippets: 0, .. }
+        ));
+        let count: i64 = conn
+            .query_row("SELECT COUNT(*) FROM snippets", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(count, 0, "an explicitly emptied library must stay empty");
     }
 
@@ -805,7 +943,10 @@ mod tests {
         write(&d.join("snippets.json"), "");
         write(&d.join("config.json"), "");
         let (_conn, outcome) = ensure_canonical_db(d).unwrap();
-        assert!(matches!(outcome, MigrationOutcome::FreshSeeded { snippets: 6 }));
+        assert!(matches!(
+            outcome,
+            MigrationOutcome::FreshSeeded { snippets: 6 }
+        ));
         // Zero-byte files are preserved as backups anyway (they existed).
     }
 
@@ -822,7 +963,14 @@ mod tests {
         let cfg = db::load_config(&conn).unwrap().unwrap();
         assert!(cfg.vault_is_configured());
         let meta = cfg.vault_meta().unwrap();
-        assert_eq!((meta.salt.as_str(), meta.nonce.as_str(), meta.canary.as_str()), ("cw==", "bg==", "Yw=="));
+        assert_eq!(
+            (
+                meta.salt.as_str(),
+                meta.nonce.as_str(),
+                meta.canary.as_str()
+            ),
+            ("cw==", "bg==", "Yw==")
+        );
     }
 
     #[test]
@@ -834,10 +982,14 @@ mod tests {
         let (conn, _) = ensure_canonical_db(d).unwrap();
         let migrated_at = db::get_migration_meta(&conn, "migrated_at").unwrap();
         assert!(migrated_at.unwrap().ends_with('Z'));
-        let kind = db::get_migration_meta(&conn, "source_kind").unwrap().unwrap();
+        let kind = db::get_migration_meta(&conn, "source_kind")
+            .unwrap()
+            .unwrap();
         assert_eq!(kind, "migrated");
         // Hashes are recorded even though the backup was renamed away.
-        let snip_hash = db::get_migration_meta(&conn, "source_snippets_sha256").unwrap().unwrap();
+        let snip_hash = db::get_migration_meta(&conn, "source_snippets_sha256")
+            .unwrap()
+            .unwrap();
         assert_eq!(snip_hash.len(), 64, "sha256 hex expected");
     }
 
@@ -884,25 +1036,79 @@ mod tests {
     }
 
     #[test]
-    fn backup_names_are_unique_across_repeated_runs() {
+    fn repeated_backups_never_overwrite_and_collisions_get_suffixes() {
+        // Deterministic test of TWO real invariants (no wall-clock, no sleep):
+        //   1. Two backup operations (even in the same timestamp second) must
+        //      never clobber an earlier backup.
+        //   2. Same-timestamp filename collisions are resolved with `.1`, `.2`, …
+        // The fixed timestamp is passed straight into the backup helper, so the
+        // result cannot depend on whether the clock rolls over a second boundary.
         let dir = tempfile::tempdir().unwrap();
         let d = dir.path();
-        write(&d.join("snippets.json"), "[]");
-        let ts = backup_timestamp(now_secs());
-        write(&d.join(format!("snippets.json.legacy-backup-{ts}")), "existing");
+        let fixed_secs = 1_787_700_000u64; // deterministic UTC instant
+        let ts = backup_timestamp(fixed_secs);
 
-        ensure_canonical_db(d).unwrap();
-        // Original moved to a numbered variant rather than clobbering.
-        // The backup timestamp is second-granular, so allow for a 1s rollover
-        // between the test's ts and the migration's ts.
-        assert!(!d.join("snippets.json").exists());
-        let has_numbered = std::fs::read_dir(d)
-            .unwrap()
-            .flatten()
-            .any(|e| e.file_name().to_string_lossy().ends_with(".1"));
-        assert!(has_numbered, "a .1 backup should exist; dir: {:?}", std::fs::read_dir(d).unwrap().flatten().map(|e| e.file_name()).collect::<Vec<_>>());
-        // The pre-existing backup must still be intact.
+        write(&d.join("snippets.json"), "first");
+        write(&d.join("config.json"), "{}");
+
+        // First backup run.
+        let first = backup_legacy_files(d, fixed_secs);
+        let first_snip = first.iter().find(|b| b.file == "snippets.json").unwrap();
+        assert_eq!(first_snip.status, "backed-up");
+        let expected_first = format!("snippets.json.legacy-backup-{ts}");
+        assert_eq!(
+            first_snip.backup_path.as_deref(),
+            Some(expected_first.as_str())
+        );
         assert!(d.join(format!("snippets.json.legacy-backup-{ts}")).exists());
+
+        // Simulate a concurrent migration arriving in the SAME timestamp second:
+        // sources reappear and are backed up again. Must NOT overwrite the first.
+        write(&d.join("snippets.json"), "second");
+        write(&d.join("config.json"), "{}");
+        let second = backup_legacy_files(d, fixed_secs);
+        let second_snip = second.iter().find(|b| b.file == "snippets.json").unwrap();
+        let expected_second = format!("snippets.json.legacy-backup-{ts}.1");
+        assert_eq!(
+            second_snip.backup_path.as_deref(),
+            Some(expected_second.as_str())
+        );
+        assert_ne!(first_snip.backup_path, second_snip.backup_path);
+
+        // Both backups survive, with exact original contents — nothing clobbered.
+        assert!(d.join(format!("snippets.json.legacy-backup-{ts}")).exists());
+        assert!(d
+            .join(format!("snippets.json.legacy-backup-{ts}.1"))
+            .exists());
+        assert_eq!(
+            std::fs::read_to_string(d.join(format!("snippets.json.legacy-backup-{ts}"))).unwrap(),
+            "first"
+        );
+        assert_eq!(
+            std::fs::read_to_string(d.join(format!("snippets.json.legacy-backup-{ts}.1"))).unwrap(),
+            "second"
+        );
+        assert!(
+            !d.join("snippets.json").exists(),
+            "source renamed away both times"
+        );
+    }
+
+    #[test]
+    fn unique_backup_path_increments_existing_suffixes() {
+        let dir = tempfile::tempdir().unwrap();
+        let d = dir.path();
+        let name = "snippets.json";
+        let ts = "20260827-000000";
+        write(&d.join(format!("{name}.legacy-backup-{ts}")), "a");
+        write(&d.join(format!("{name}.legacy-backup-{ts}.1")), "b");
+        // Next candidate must be .2, never reusing an existing path.
+        let next = unique_backup_path(d, name, ts).unwrap();
+        assert_eq!(
+            next.file_name().unwrap().to_string_lossy(),
+            format!("{name}.legacy-backup-{ts}.2")
+        );
+        assert!(!next.exists());
     }
 
     #[test]

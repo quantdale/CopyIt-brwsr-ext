@@ -6,8 +6,12 @@
 //! requests. Origins supplied inside JSON are never authoritative.
 
 /// The deterministic extension ID derived from the manifest key committed in
-/// `extension/dist/manifest.json` (see `scripts/get-extension-id.mjs`).
-pub const EXTENSION_ID: &str = "anlbacbolhgdagnjcldfakmannbldpdl";
+/// `extension/manifest.json` (see `scripts/get-extension-id.mjs`).
+///
+/// DO NOT hand-edit. A regression test derives the expected value from the
+/// committed manifest `key` and fails on drift, so this constant and the
+/// browser it defends always agree.
+pub const EXTENSION_ID: &str = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
 
 pub fn expected_origin() -> String {
     format!("chrome-extension://{EXTENSION_ID}/")
@@ -72,7 +76,9 @@ mod tests {
     #[test]
     fn accepts_the_deterministic_origin() {
         assert_eq!(
-            validate_args(&args(&["chrome-extension://anlbacbolhgdagnjcldfakmannbldpdl/"])),
+            validate_args(&args(&[
+                "chrome-extension://mmiopnfmhmmlmhcdjklelfcdahmgchfc/"
+            ])),
             OriginCheck::Allowed
         );
     }
@@ -81,7 +87,7 @@ mod tests {
     fn accepts_origin_with_parent_window_flag() {
         assert_eq!(
             validate_args(&args(&[
-                "chrome-extension://anlbacbolhgdagnjcldfakmannbldpdl/",
+                "chrome-extension://mmiopnfmhmmlmhcdjklelfcdahmgchfc/",
                 "--parent-window=1234567",
             ])),
             OriginCheck::Allowed
@@ -91,7 +97,9 @@ mod tests {
     #[test]
     fn rejects_unknown_origins() {
         assert!(matches!(
-            validate_args(&args(&["chrome-extension://aaaaaaaaaaaaaaaaaaaaaaapaaaaaa/"])),
+            validate_args(&args(&[
+                "chrome-extension://aaaaaaaaaaaaaaaaaaaaaaapaaaaaa/"
+            ])),
             OriginCheck::Rejected { .. }
         ));
     }
@@ -100,7 +108,9 @@ mod tests {
     fn rejects_missing_or_flag_only_argv() {
         assert!(matches!(
             validate_args(&args(&[])),
-            OriginCheck::Rejected { reason: "no origin argument provided" }
+            OriginCheck::Rejected {
+                reason: "no origin argument provided"
+            }
         ));
         assert!(matches!(
             validate_args(&args(&["--parent-window=1"])),
@@ -111,7 +121,9 @@ mod tests {
     #[test]
     fn origin_prefix_is_never_enough() {
         assert!(matches!(
-            validate_args(&args(&["chrome-extension://anlbacbolhgdagnjcldfakmannbldpdl/evil?x"])),
+            validate_args(&args(&[
+                "chrome-extension://mmiopnfmhmmlmhcdjklelfcdahmgchfc/evil?x"
+            ])),
             OriginCheck::Rejected { .. }
         ));
     }
@@ -120,5 +132,35 @@ mod tests {
     fn extension_id_is_well_formed() {
         assert_eq!(EXTENSION_ID.len(), 32);
         assert!(EXTENSION_ID.bytes().all(|b| b.is_ascii_lowercase()));
+    }
+
+    #[test]
+    fn extension_id_derives_from_committed_manifest_key() {
+        // Byte-for-byte reproduction of scripts/get-extension-id.mjs against the
+        // committed manifest. This is the guard that keeps EXTENSION_ID in sync
+        // with the public key users actually load into Chrome/Edge.
+        use base64::engine::general_purpose::STANDARD as B64;
+        use base64::Engine as _;
+        use sha2::{Digest, Sha256};
+
+        let raw = include_str!("../../extension/manifest.json");
+        let v: serde_json::Value = serde_json::from_str(raw).expect("manifest parses");
+        let key = v["key"]
+            .as_str()
+            .expect("manifest carries a deterministic key");
+        let der = B64.decode(key).expect("key is standard base64");
+        let digest = Sha256::digest(&der);
+        let derived: String = digest
+            .iter()
+            .take(16)
+            .flat_map(|&b| [b >> 4, b & 0x0F])
+            .map(|nibble| char::from(b'a' + nibble))
+            .collect();
+        assert_eq!(derived.len(), 32);
+        assert_eq!(
+            derived, EXTENSION_ID,
+            "host origin and manifest key have drifted"
+        );
+        assert_eq!(expected_origin(), format!("chrome-extension://{derived}/"));
     }
 }
