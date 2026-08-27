@@ -893,8 +893,16 @@ mod tests {
 
         ensure_canonical_db(d).unwrap();
         // Original moved to a numbered variant rather than clobbering.
+        // The backup timestamp is second-granular, so allow for a 1s rollover
+        // between the test's ts and the migration's ts.
         assert!(!d.join("snippets.json").exists());
-        assert!(d.join(format!("snippets.json.legacy-backup-{ts}.1")).exists());
+        let has_numbered = std::fs::read_dir(d)
+            .unwrap()
+            .flatten()
+            .any(|e| e.file_name().to_string_lossy().ends_with(".1"));
+        assert!(has_numbered, "a .1 backup should exist; dir: {:?}", std::fs::read_dir(d).unwrap().flatten().map(|e| e.file_name()).collect::<Vec<_>>());
+        // The pre-existing backup must still be intact.
+        assert!(d.join(format!("snippets.json.legacy-backup-{ts}")).exists());
     }
 
     #[test]
