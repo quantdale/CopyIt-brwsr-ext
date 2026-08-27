@@ -99,7 +99,10 @@ mod tests {
         let mut cursor = Cursor::new(data);
         assert_eq!(read_message(&mut cursor).unwrap().unwrap(), b"one".to_vec());
         assert_eq!(read_message(&mut cursor).unwrap().unwrap(), b"two".to_vec());
-        assert_eq!(read_message(&mut cursor).unwrap().unwrap(), b"three".to_vec());
+        assert_eq!(
+            read_message(&mut cursor).unwrap().unwrap(),
+            b"three".to_vec()
+        );
         assert!(read_message(&mut cursor).unwrap().is_none());
     }
 
@@ -134,7 +137,10 @@ mod tests {
         let mut data = (u32::MAX).to_ne_bytes().to_vec();
         data.extend_from_slice(b"junk");
         let mut cursor = Cursor::new(data);
-        assert!(matches!(read_message(&mut cursor), Err(FrameError::TooLarge)));
+        assert!(matches!(
+            read_message(&mut cursor),
+            Err(FrameError::TooLarge)
+        ));
     }
 
     #[test]
@@ -145,7 +151,10 @@ mod tests {
             write_message(&mut out, &big),
             Err(FrameError::TooLarge)
         ));
-        assert!(out.is_empty(), "nothing may be written for an refused frame");
+        assert!(
+            out.is_empty(),
+            "nothing may be written for an refused frame"
+        );
     }
 
     #[test]
@@ -154,7 +163,10 @@ mod tests {
         let mut buf = Vec::new();
         write_message(&mut buf, payload).unwrap();
         let mut cursor = Cursor::new(buf);
-        assert_eq!(read_message(&mut cursor).unwrap().unwrap(), payload.to_vec());
+        assert_eq!(
+            read_message(&mut cursor).unwrap().unwrap(),
+            payload.to_vec()
+        );
     }
 
     #[test]

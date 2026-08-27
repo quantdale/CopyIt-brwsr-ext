@@ -116,8 +116,16 @@ fn build_fixture(data_dir: &std::path::Path) {
         "theme": "Nord",
         "vault": {"salt": salt_b64, "nonce": canary_nonce_b64, "canary": canary_ct_b64}
     });
-    std::fs::write(data_dir.join("snippets.json"), serde_json::to_string(&snippets).unwrap()).unwrap();
-    std::fs::write(data_dir.join("config.json"), serde_json::to_string(&config).unwrap()).unwrap();
+    std::fs::write(
+        data_dir.join("snippets.json"),
+        serde_json::to_string(&snippets).unwrap(),
+    )
+    .unwrap();
+    std::fs::write(
+        data_dir.join("config.json"),
+        serde_json::to_string(&config).unwrap(),
+    )
+    .unwrap();
 }
 
 #[test]
@@ -159,7 +167,10 @@ fn full_v1_journey_over_real_framing() {
     assert_eq!(items[1]["id"], 12);
     assert_eq!(items[1]["protected"], true);
     let raw = serde_json::to_string(&list).unwrap().to_lowercase();
-    assert!(!raw.contains("alpine-meadow"), "bodies must not appear in lists");
+    assert!(
+        !raw.contains("alpine-meadow"),
+        "bodies must not appear in lists"
+    );
     assert!(!raw.contains("ciphertext"));
 
     // 4. Plaintext body retrieval.
@@ -183,7 +194,10 @@ fn full_v1_journey_over_real_framing() {
 
     // 8. Protected body now decrypts.
     let unlocked_body = host.request("getSnippetBody", "g3", json!({"id": 12}));
-    assert_eq!(unlocked_body["result"]["body"], "The launch code is alpine-meadow.");
+    assert_eq!(
+        unlocked_body["result"]["body"],
+        "The launch code is alpine-meadow."
+    );
 
     // 9. Lock wipes the session key.
     let lock = host.request("lockVault", "lk1", json!({}));
@@ -216,10 +230,17 @@ fn full_v1_journey_over_real_framing() {
         .flatten()
         .map(|e| e.file_name().to_string_lossy().into_owned())
         .collect();
-    assert!(entries.iter().any(|n| n.starts_with("snippets.json.legacy-backup-")));
-    assert!(entries.iter().any(|n| n.starts_with("config.json.legacy-backup-")));
+    assert!(entries
+        .iter()
+        .any(|n| n.starts_with("snippets.json.legacy-backup-")));
+    assert!(entries
+        .iter()
+        .any(|n| n.starts_with("config.json.legacy-backup-")));
     assert!(data_dir.join("copyit.db").exists(), "canonical DB exists");
-    assert!(!data_dir.join("snippets.json").exists(), "source JSON renamed to backup");
+    assert!(
+        !data_dir.join("snippets.json").exists(),
+        "source JSON renamed to backup"
+    );
 }
 
 #[test]
@@ -238,7 +259,10 @@ fn host_rejects_wrong_origin_argument() {
         String::from_utf8_lossy(&out.stderr).contains("refusing"),
         "diagnostic goes to stderr"
     );
-    assert!(!data_dir.exists(), "user data untouched on origin rejection");
+    assert!(
+        !data_dir.exists(),
+        "user data untouched on origin rejection"
+    );
 }
 
 #[test]

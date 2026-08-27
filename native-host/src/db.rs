@@ -127,9 +127,10 @@ pub fn schema_version(conn: &Connection) -> Result<i64, DbError> {
         return Ok(0);
     }
     // A schema_migrations row exists only after its migration committed.
-    let max: Option<i64> = conn.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
-        row.get(0)
-    })?;
+    let max: Option<i64> =
+        conn.query_row("SELECT MAX(version) FROM schema_migrations", [], |row| {
+            row.get(0)
+        })?;
     Ok(max.unwrap_or(0))
 }
 
@@ -174,11 +175,14 @@ pub fn verify_lightweight(conn: &Connection) -> Result<(), DbError> {
     if integrity != "ok" {
         return Err(DbError::Integrity(integrity));
     }
-    let fk_violations = conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
-        row.get::<_, i64>(0)
-    })?;
+    let fk_violations =
+        conn.query_row("SELECT COUNT(*) FROM pragma_foreign_key_check", [], |row| {
+            row.get::<_, i64>(0)
+        })?;
     if fk_violations != 0 {
-        return Err(DbError::Integrity(format!("{fk_violations} foreign key violations")));
+        return Err(DbError::Integrity(format!(
+            "{fk_violations} foreign key violations"
+        )));
     }
     Ok(())
 }
@@ -250,7 +254,10 @@ fn escape_like(input: &str) -> String {
     out
 }
 
-fn search_filter(query: Option<&str>, category: Option<&str>) -> (Vec<&'static str>, Vec<Box<dyn rusqlite::types::ToSql>>) {
+fn search_filter(
+    query: Option<&str>,
+    category: Option<&str>,
+) -> (Vec<&'static str>, Vec<Box<dyn rusqlite::types::ToSql>>) {
     let mut clauses: Vec<&'static str> = Vec::new();
     let mut binds: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
     if let Some(q) = query.map(str::trim).filter(|q| !q.is_empty()) {
@@ -306,7 +313,10 @@ pub fn list_categories(conn: &Connection) -> Result<Vec<CategoryInfo>, DbError> 
         )?;
         let collected = stmt
             .query_map([], |row| {
-                Ok(CategoryInfo { name: row.get(0)?, count: row.get(1)? })
+                Ok(CategoryInfo {
+                    name: row.get(0)?,
+                    count: row.get(1)?,
+                })
             })?
             .collect::<Result<Vec<_>, _>>()?;
         collected
@@ -331,9 +341,10 @@ pub fn list_snippets(
     let total: i64 = {
         let sql = format!("SELECT COUNT(*) FROM snippets{where_clause}");
         let mut stmt = conn.prepare_cached(&sql)?;
-        stmt.query_row(rusqlite::params_from_iter(binds.iter().map(|b| b.as_ref())), |row| {
-            row.get(0)
-        })?
+        stmt.query_row(
+            rusqlite::params_from_iter(binds.iter().map(|b| b.as_ref())),
+            |row| row.get(0),
+        )?
     };
 
     let sql = format!(
@@ -347,7 +358,10 @@ pub fn list_snippets(
     binds.push(Box::new(offset));
     let mut stmt = conn.prepare_cached(&sql)?;
     let items = stmt
-        .query_map(rusqlite::params_from_iter(binds.iter().map(|b| b.as_ref())), row_to_meta)?
+        .query_map(
+            rusqlite::params_from_iter(binds.iter().map(|b| b.as_ref())),
+            row_to_meta,
+        )?
         .collect::<Result<Vec<_>, _>>()?;
     Ok((items, total))
 }
@@ -444,7 +458,11 @@ mod tests {
         protected: bool,
         sort_order: i64,
     ) {
-        let hint: Option<String> = if protected { Some("aGludA==".into()) } else { None };
+        let hint: Option<String> = if protected {
+            Some("aGludA==".into())
+        } else {
+            None
+        };
         conn.execute(
             "INSERT INTO snippets (id, title, description, category, body, protection_hint, protection_nonce, protection_ciphertext, sort_order, created_at, updated_at)
              VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z')",
@@ -490,7 +508,10 @@ mod tests {
         let err = migrate_forward(&conn).unwrap_err();
         assert!(matches!(
             err,
-            DbError::UnsupportedSchemaVersion { found: 99, supported: 1 }
+            DbError::UnsupportedSchemaVersion {
+                found: 99,
+                supported: 1
+            }
         ));
     }
 
@@ -536,10 +557,37 @@ mod tests {
     #[test]
     fn search_matches_title_description_category_and_body() {
         let conn = memory_db();
-        insert_snippet(&conn, 1, "Alpha Rocket", None, "Git", "plain body", false, 0);
-        insert_snippet(&conn, 2, "Beta", Some("describes gamma rays"), "Prompt", "x", false, 1);
+        insert_snippet(
+            &conn,
+            1,
+            "Alpha Rocket",
+            None,
+            "Git",
+            "plain body",
+            false,
+            0,
+        );
+        insert_snippet(
+            &conn,
+            2,
+            "Beta",
+            Some("describes gamma rays"),
+            "Prompt",
+            "x",
+            false,
+            1,
+        );
         insert_snippet(&conn, 3, "Delta", None, "Gambling", "y", false, 2);
-        insert_snippet(&conn, 4, "Epsilon", None, "Misc", "contains gammatone", false, 3);
+        insert_snippet(
+            &conn,
+            4,
+            "Epsilon",
+            None,
+            "Misc",
+            "contains gammatone",
+            false,
+            3,
+        );
 
         let expected_matches = [("rocket", 1), ("gamma", 2), ("gambl", 1), ("gammat", 1)];
         for (q, want) in expected_matches {
@@ -555,7 +603,10 @@ mod tests {
         let conn = memory_db();
         insert_snippet(&conn, 1, "Locked Secret", None, "G", "", true, 0);
         let (_, by_body) = list_snippets(&conn, Some("TOPSECRET"), None, 0, 100).unwrap();
-        assert_eq!(by_body, 0, "ciphertext/plaintext body must not be searchable");
+        assert_eq!(
+            by_body, 0,
+            "ciphertext/plaintext body must not be searchable"
+        );
         let (_, by_title) = list_snippets(&conn, Some("locked secret"), None, 0, 100).unwrap();
         assert_eq!(by_title, 1, "title remains searchable while protected");
     }
@@ -585,7 +636,8 @@ mod tests {
     fn list_results_never_include_body_or_ciphertext() {
         let conn = memory_db();
         insert_snippet(&conn, 1, "Secret", None, "G", "TOP SECRET BODY", true, 0);
-        let json = serde_json::to_string(&list_snippets(&conn, None, None, 0, 100).unwrap().0[0]).unwrap();
+        let json =
+            serde_json::to_string(&list_snippets(&conn, None, None, 0, 100).unwrap().0[0]).unwrap();
         assert!(!json.contains("TOP SECRET BODY"));
         assert!(!json.to_lowercase().contains("cipher"));
         assert!(!json.to_lowercase().contains("nonce"));
@@ -612,8 +664,16 @@ mod tests {
         let conn = memory_db();
         insert_snippet(&conn, 1, "A", None, "Git", "", false, 0);
         insert_snippet(&conn, 2, "B", None, "Git", "", false, 1);
-        conn.execute("INSERT INTO categories (name, sort_order) VALUES ('Git', 0)", []).unwrap();
-        conn.execute("INSERT INTO categories (name, sort_order) VALUES ('Prompt', 1)", []).unwrap();
+        conn.execute(
+            "INSERT INTO categories (name, sort_order) VALUES ('Git', 0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO categories (name, sort_order) VALUES ('Prompt', 1)",
+            [],
+        )
+        .unwrap();
 
         let cats = list_categories(&conn).unwrap();
         let git = cats.iter().find(|c| c.name == "Git").unwrap();
@@ -661,7 +721,10 @@ mod tests {
              VALUES (1,'X','G','not empty','h','n','c',0,'t','t')",
             [],
         );
-        assert!(err.is_err(), "CHECK constraint must reject protected rows with a body");
+        assert!(
+            err.is_err(),
+            "CHECK constraint must reject protected rows with a body"
+        );
     }
 
     #[test]
@@ -679,9 +742,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let conn = Connection::open(dir.path().join("wal.db")).unwrap();
         apply_pragmas(&conn).unwrap();
-        let mode: String = conn.query_row("PRAGMA journal_mode", [], |r| r.get(0)).unwrap();
+        let mode: String = conn
+            .query_row("PRAGMA journal_mode", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(mode.to_lowercase(), "wal");
-        let busy: i64 = conn.query_row("PRAGMA busy_timeout", [], |r| r.get(0)).unwrap();
+        let busy: i64 = conn
+            .query_row("PRAGMA busy_timeout", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(busy, 3000);
     }
 }

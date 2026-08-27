@@ -34,7 +34,9 @@ impl Logger {
         let base = default_log_dir();
 
         match open_bounded(&base) {
-            Ok(file) => Logger { inner: Some(Mutex::new(file)) },
+            Ok(file) => Logger {
+                inner: Some(Mutex::new(file)),
+            },
             Err(_) => Logger { inner: None },
         }
     }
@@ -46,12 +48,7 @@ impl Logger {
     /// Writes one structured line. Never panics; logging failures are silent.
     pub fn log(&self, level: &str, event: &str, fields: &[(&str, &str)]) {
         let Some(file) = &self.inner else { return };
-        let mut line = format!(
-            "{} {} {}\n",
-            crate::migration::utc_now_iso(),
-            level,
-            event
-        );
+        let mut line = format!("{} {} {}\n", crate::migration::utc_now_iso(), level, event);
         for (k, v) in fields {
             line.push_str(&format!("  {k}={v}\n"));
         }
@@ -78,7 +75,10 @@ fn open_bounded(dir: &PathBuf) -> Result<std::fs::File, LogInitError> {
             let _ = std::fs::rename(&path, dir.join("native-host.log.old"));
         }
     }
-    Ok(std::fs::OpenOptions::new().create(true).append(true).open(path)?)
+    Ok(std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)?)
 }
 
 #[cfg(test)]
@@ -90,7 +90,11 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("COPYIT_LOG_DIR", dir.path());
         let logger = Logger::init();
-        logger.log("info", "request", &[("method", "listSnippets"), ("code", "ok")]);
+        logger.log(
+            "info",
+            "request",
+            &[("method", "listSnippets"), ("code", "ok")],
+        );
         drop(logger);
         std::env::remove_var("COPYIT_LOG_DIR");
 
@@ -106,7 +110,9 @@ mod tests {
         std::fs::write(dir.path().join("native-host.log"), big).unwrap();
         open_bounded(&dir.path().to_path_buf()).unwrap();
         assert!(dir.path().join("native-host.log.old").exists());
-        let new_size = std::fs::metadata(dir.path().join("native-host.log")).unwrap().len();
+        let new_size = std::fs::metadata(dir.path().join("native-host.log"))
+            .unwrap()
+            .len();
         assert_eq!(new_size, 0);
     }
 }

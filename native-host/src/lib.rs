@@ -14,8 +14,8 @@ pub mod protocol;
 pub mod vault;
 
 pub use migration::{
-    backup_timestamp, data_dir, db_path, default_seed, ensure_canonical_db, hash_file,
-    utc_now_iso, BackupOutcome, MigrationError, MigrationLock, MigrationOutcome,
+    backup_timestamp, data_dir, db_path, default_seed, ensure_canonical_db, hash_file, utc_now_iso,
+    BackupOutcome, MigrationError, MigrationLock, MigrationOutcome,
 };
 
 /// Truncates a string to at most `max_bytes` UTF-8 without splitting a char.

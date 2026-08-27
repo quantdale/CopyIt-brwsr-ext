@@ -180,8 +180,14 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         write_file(dir.path(), "empty.json", b"");
         write_file(dir.path(), "ws.json", b"  \r\n\t ");
-        assert_eq!(read_source::<LegacyConfig>(&dir.path().join("empty.json")), SourceLoad::Missing);
-        assert_eq!(read_source::<LegacyConfig>(&ws_path(dir.path())), SourceLoad::Missing);
+        assert_eq!(
+            read_source::<LegacyConfig>(&dir.path().join("empty.json")),
+            SourceLoad::Missing
+        );
+        assert_eq!(
+            read_source::<LegacyConfig>(&ws_path(dir.path())),
+            SourceLoad::Missing
+        );
     }
 
     fn ws_path(dir: &Path) -> std::path::PathBuf {
@@ -226,7 +232,10 @@ mod tests {
         let v: Vec<LegacySnippet> = serde_json::from_str(json).unwrap();
         assert_eq!(v.len(), 1);
         let p = v[0].protection.as_ref().unwrap();
-        assert_eq!((p.hint.as_str(), p.nonce.as_str(), p.ciphertext.as_str()), ("hello", "bm9uY2U=", "Y3Q="));
+        assert_eq!(
+            (p.hint.as_str(), p.nonce.as_str(), p.ciphertext.as_str()),
+            ("hello", "bm9uY2U=", "Y3Q=")
+        );
     }
 
     #[test]
@@ -273,6 +282,9 @@ mod tests {
             "".to_string(),
             " GIT ".to_string(),
         ];
-        assert_eq!(sanitize_categories(&raw), vec!["Git".to_string(), "Prompt".to_string()]);
+        assert_eq!(
+            sanitize_categories(&raw),
+            vec!["Git".to_string(), "Prompt".to_string()]
+        );
     }
 }

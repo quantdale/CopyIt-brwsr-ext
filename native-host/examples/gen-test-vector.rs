@@ -47,8 +47,13 @@ fn main() {
         .expect("body encrypt");
 
     // Independent verification of what we just produced.
-    vault::verify_password(password, salt_b64, canary_nonce_b64, &B64.encode(&canary_ct))
-        .expect("self-verify canary");
+    vault::verify_password(
+        password,
+        salt_b64,
+        canary_nonce_b64,
+        &B64.encode(&canary_ct),
+    )
+    .expect("self-verify canary");
 
     let key_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
 

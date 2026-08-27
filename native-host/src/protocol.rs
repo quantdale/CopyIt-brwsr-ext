@@ -177,11 +177,10 @@ impl Response {
 /// Parses raw frame bytes into a validated [`Request`], mapping any problem to
 /// a protocol failure response with a stable error code.
 pub fn parse_request(bytes: &[u8]) -> Result<Request, Response> {
-    let text = std::str::from_utf8(bytes).map_err(|_| {
-        Response::failure("", ErrorCode::InvalidRequest)
-    })?;
-    let req: Request = serde_json::from_str(text)
-        .map_err(|_| Response::failure("", ErrorCode::InvalidRequest))?;
+    let text =
+        std::str::from_utf8(bytes).map_err(|_| Response::failure("", ErrorCode::InvalidRequest))?;
+    let req: Request =
+        serde_json::from_str(text).map_err(|_| Response::failure("", ErrorCode::InvalidRequest))?;
     let mut req = req;
     if req.params.is_null() {
         req.params = serde_json::json!({});
@@ -215,7 +214,8 @@ mod tests {
 
     #[test]
     fn parses_valid_request() {
-        let req = parse_ok(br#"{"protocolVersion":1,"requestId":"abc-1","method":"ping","params":{}}"#);
+        let req =
+            parse_ok(br#"{"protocolVersion":1,"requestId":"abc-1","method":"ping","params":{}}"#);
         assert_eq!(req.method, "ping");
         assert_eq!(req.request_id, "abc-1");
         assert_eq!(req.params, json!({}));

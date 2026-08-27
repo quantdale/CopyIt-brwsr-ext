@@ -7,12 +7,11 @@
 //! launched them as a native host.
 
 use copyit_native_host::{
-    db, ensure_canonical_db, data_dir, db_path, framing,
+    data_dir, db, db_path, ensure_canonical_db, framing,
     logging::{self, Logger},
     origin,
     protocol::{self, method, ErrorCode, Request, Response},
-    safe_truncate_utf8, vault, MigrationError,
-    MAX_DESCRIPTION_BYTES, MAX_TITLE_BYTES,
+    safe_truncate_utf8, vault, MigrationError, MAX_DESCRIPTION_BYTES, MAX_TITLE_BYTES,
 };
 use std::io::BufReader;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -75,7 +74,10 @@ fn native_mode(args: &[String]) -> i32 {
                 host.logger.log("error", "frame_read", &[("kind", kind)]);
                 // A frame that violates the size contract is a protocol
                 // violation, not a normal disconnect.
-                framing_violation = !matches!(e, framing::FrameError::Eof | framing::FrameError::UnexpectedEof);
+                framing_violation = !matches!(
+                    e,
+                    framing::FrameError::Eof | framing::FrameError::UnexpectedEof
+                );
                 break;
             }
         };
@@ -108,7 +110,11 @@ fn native_mode(args: &[String]) -> i32 {
 
     host.logger.log("info", "stop", &[]);
     drop(host);
-    if framing_violation { 1 } else { 0 }
+    if framing_violation {
+        1
+    } else {
+        0
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -210,7 +216,10 @@ impl Host {
             method::UNLOCK_VAULT => self.unlock_vault(req),
             method::LOCK_VAULT => {
                 self.lock_vault();
-                Response::success(&req.request_id, serde_json::json!({ "vaultState": "locked" }))
+                Response::success(
+                    &req.request_id,
+                    serde_json::json!({ "vaultState": "locked" }),
+                )
             }
             _ => Response::failure(&req.request_id, ErrorCode::UnknownMethod),
         }
@@ -220,7 +229,11 @@ impl Host {
         let (db_ready, db_schema, last_error) = match self.connection() {
             Ok(conn) => match db::schema_version(conn) {
                 Ok(v) => (true, serde_json::json!(v), None),
-                Err(e) => (false, serde_json::json!(null), Some(code_json(e.error_code()))),
+                Err(e) => (
+                    false,
+                    serde_json::json!(null),
+                    Some(code_json(e.error_code())),
+                ),
             },
             Err((code, _)) => (false, serde_json::json!(null), Some(code_json(code))),
         };
@@ -491,38 +504,49 @@ fn self_test() -> i32 {
         };
     }
 
-    check!("framing_round_trip", || -> Result<String, String> {
-        let payload = br#"{"probe":1}"#;
-        let mut buf = Vec::new();
-        framing::write_message(&mut buf, payload).map_err(|e| e.to_string())?;
-        let mut cursor = std::io::Cursor::new(buf);
-        let read = framing::read_message(&mut cursor).map_err(|e| e.to_string())?;
-        if read.as_deref() == Some(payload.as_slice()) {
-            Ok(String::new())
-        } else {
-            Err("payload mismatch".into())
-        }
-    }());
+    check!(
+        "framing_round_trip",
+        || -> Result<String, String> {
+            let payload = br#"{"probe":1}"#;
+            let mut buf = Vec::new();
+            framing::write_message(&mut buf, payload).map_err(|e| e.to_string())?;
+            let mut cursor = std::io::Cursor::new(buf);
+            let read = framing::read_message(&mut cursor).map_err(|e| e.to_string())?;
+            if read.as_deref() == Some(payload.as_slice()) {
+                Ok(String::new())
+            } else {
+                Err("payload mismatch".into())
+            }
+        }()
+    );
 
-    check!("protocol_parse", || -> Result<String, String> {
-        let req =
-            protocol::parse_request(br#"{"protocolVersion":1,"requestId":"t","method":"ping"}"#)
-                .map_err(|_| "valid request rejected".to_string())?;
-        if req.method == "ping" {
-            Ok(String::new())
-        } else {
-            Err("wrong method parsed".into())
-        }
-    }());
+    check!(
+        "protocol_parse",
+        || -> Result<String, String> {
+            let req = protocol::parse_request(
+                br#"{"protocolVersion":1,"requestId":"t","method":"ping"}"#,
+            )
+            .map_err(|_| "valid request rejected".to_string())?;
+            if req.method == "ping" {
+                Ok(String::new())
+            } else {
+                Err("wrong method parsed".into())
+            }
+        }()
+    );
 
     check!("vault_test_vector", verify_embedded_vector());
 
-    check!("sqlite_smoke", || -> Result<String, String> {
-        let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-        let (conn, _) = ensure_canonical_db(dir.path()).map_err(|e| e.to_string())?;
-        let (_, total) = db::list_snippets(&conn, None, None, 0, 10).map_err(|e| e.to_string())?;
-        Ok(format!(" ({total} seeded rows visible)"))
-    }());
+    check!(
+        "sqlite_smoke",
+        || -> Result<String, String> {
+            let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
+            let (conn, _) = ensure_canonical_db(dir.path()).map_err(|e| e.to_string())?;
+            let (_, total) =
+                db::list_snippets(&conn, None, None, 0, 10).map_err(|e| e.to_string())?;
+            Ok(format!(" ({total} seeded rows visible)"))
+        }()
+    );
 
     check!("utf8_truncation", {
         let s = "aé日🙂x";
@@ -549,7 +573,9 @@ fn verify_embedded_vector() -> Result<String, String> {
     let raw = include_str!("../../protocol/test-vectors/vault-vector.json");
     let v: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
     let password = v["password"].as_str().ok_or("vector missing password")?;
-    let salt = v["inputs"]["saltB64"].as_str().ok_or("vector missing salt")?;
+    let salt = v["inputs"]["saltB64"]
+        .as_str()
+        .ok_or("vector missing salt")?;
     let canary_nonce = v["inputs"]["canaryNonceB64"]
         .as_str()
         .ok_or("vector missing canary nonce")?;
@@ -560,7 +586,9 @@ fn verify_embedded_vector() -> Result<String, String> {
     let key = vault::verify_password(password, salt, canary_nonce, expected_canary)
         .map_err(|_| "canary verification failed".to_string())?;
 
-    let expected_hex = v["expected"]["keyHex"].as_str().ok_or("vector missing keyHex")?;
+    let expected_hex = v["expected"]["keyHex"]
+        .as_str()
+        .ok_or("vector missing keyHex")?;
     let actual_hex: String = key.iter().map(|b| format!("{b:02x}")).collect();
     if actual_hex != expected_hex {
         return Err("derived key does not match committed vector".into());
@@ -569,7 +597,9 @@ fn verify_embedded_vector() -> Result<String, String> {
     let body = v["inputs"]["plaintextBody"]
         .as_str()
         .ok_or("vector missing plaintext")?;
-    let nonce = v["inputs"]["nonceB64"].as_str().ok_or("vector missing nonce")?;
+    let nonce = v["inputs"]["nonceB64"]
+        .as_str()
+        .ok_or("vector missing nonce")?;
     let ct = v["expected"]["ciphertextB64"]
         .as_str()
         .ok_or("vector missing ciphertext")?;
@@ -624,7 +654,10 @@ fn migrate_only() -> i32 {
     println!("Migrating in {}", dir.display());
     match ensure_canonical_db(&dir) {
         Ok((_conn, outcome)) => {
-            println!("{}", serde_json::to_string_pretty(&outcome).unwrap_or_default());
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&outcome).unwrap_or_default()
+            );
             0
         }
         Err(e) => {

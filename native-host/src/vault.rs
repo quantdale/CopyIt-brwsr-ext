@@ -54,8 +54,8 @@ pub fn encode_b64(data: &[u8]) -> String {
 
 /// Derives the 32-byte vault key with the exact desktop KDF parameters.
 pub fn derive_key(password: &str, salt: &[u8]) -> Result<[u8; KEY_LEN], VaultError> {
-    let params = Params::new(19 * 1024, 2, 1, None)
-        .map_err(|e| VaultError::KeyDerivation(e.to_string()))?;
+    let params =
+        Params::new(19 * 1024, 2, 1, None).map_err(|e| VaultError::KeyDerivation(e.to_string()))?;
     let argon = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
     let mut out = [0u8; KEY_LEN];
     argon
@@ -83,7 +83,11 @@ pub fn encrypt(key: &[u8; KEY_LEN], plaintext: &[u8]) -> Result<(String, String)
 
 /// Decrypts base64 nonce + ciphertext produced by the desktop app or this host.
 /// Authentication failure yields `VaultError::Decryption` and never partial text.
-pub fn decrypt(key: &[u8; KEY_LEN], nonce_b64: &str, ciphertext_b64: &str) -> Result<Vec<u8>, VaultError> {
+pub fn decrypt(
+    key: &[u8; KEY_LEN],
+    nonce_b64: &str,
+    ciphertext_b64: &str,
+) -> Result<Vec<u8>, VaultError> {
     let nonce_bytes = decode_b64(nonce_b64)?;
     if nonce_bytes.len() != NONCE_LEN {
         return Err(VaultError::Encoding(format!(
@@ -143,7 +147,10 @@ mod tests {
     const TEST_PASSWORD: &str = "correct horse battery staple";
 
     fn fixed_salt() -> String {
-        encode_b64(&[0x00u8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f])
+        encode_b64(&[
+            0x00u8, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f,
+        ])
     }
 
     #[test]
@@ -155,7 +162,13 @@ mod tests {
         let nonce_bytes = [0x30u8; NONCE_LEN];
         let nonce = XNonce::from_slice(&nonce_bytes);
         let ct = cipher(&key)
-            .encrypt(nonce, Payload { msg: CANARY_PLAINTEXT, aad: &[] })
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: CANARY_PLAINTEXT,
+                    aad: &[],
+                },
+            )
             .unwrap();
         let canary_b64 = encode_b64(&ct);
         let canary_nonce_b64 = encode_b64(&nonce_bytes);
@@ -171,7 +184,15 @@ mod tests {
         let key = derive_key(TEST_PASSWORD, &salt).unwrap();
         let nonce_bytes = [0x30u8; NONCE_LEN];
         let nonce = XNonce::from_slice(&nonce_bytes);
-        let ct = cipher(&key).encrypt(nonce, Payload { msg: CANARY_PLAINTEXT, aad: &[] }).unwrap();
+        let ct = cipher(&key)
+            .encrypt(
+                nonce,
+                Payload {
+                    msg: CANARY_PLAINTEXT,
+                    aad: &[],
+                },
+            )
+            .unwrap();
         let wrong = verify_password(
             "wrong password entirely",
             &fixed_salt(),
@@ -204,7 +225,10 @@ mod tests {
     fn malformed_base64_and_bad_nonce_lengths_are_rejected() {
         let salt = decode_b64(&fixed_salt()).unwrap();
         let key = derive_key(TEST_PASSWORD, &salt).unwrap();
-        assert!(matches!(decrypt(&key, "!!!not-base64!!!", "AAAA"), Err(VaultError::Encoding(_))));
+        assert!(matches!(
+            decrypt(&key, "!!!not-base64!!!", "AAAA"),
+            Err(VaultError::Encoding(_))
+        ));
         let short_nonce = encode_b64(&[0u8; 12]);
         assert!(matches!(
             decrypt_body(&key, &short_nonce, "AAAA"),
