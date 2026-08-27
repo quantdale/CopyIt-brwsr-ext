@@ -75,7 +75,7 @@ export async function runRealBrowserCertification({ browserName, executablePath 
   try {
     console.log(`\nLaunching ${browserName}...`);
     ctx = await chromium.launchPersistentContext(userDir, {
-      headless: false,
+      headless: !!process.env.CI,
       executablePath,
       env: launchEnv,
       args: [
@@ -86,6 +86,7 @@ export async function runRealBrowserCertification({ browserName, executablePath 
         "--disable-infobars",
       ],
       viewport: { width: 900, height: 700 },
+      timeout: 30000,
     });
 
     await ctx.grantPermissions(["clipboard-read", "clipboard-write"]);
