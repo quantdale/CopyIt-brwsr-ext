@@ -42,12 +42,6 @@ if (isCI) {
   const realChromeExeCI = findChromeExecutable();
   if (realChromeExeCI && existsSync(realChromeExeCI)) {
     console.log(`Chrome binary verified: ${realChromeExeCI}`);
-    try {
-      const ver = execSync(`"${realChromeExeCI}" --version`, { encoding: "utf8", timeout: 5000 }).trim();
-      console.log(`Real Chrome version: ${ver}`);
-    } catch {
-      console.log(`Real Chrome version: (unable to query)`);
-    }
   } else {
     console.log("Chrome not found on this runner (expected on some images); skipping binary check (Edge proves engine).");
   }
