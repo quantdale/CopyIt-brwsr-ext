@@ -1,0 +1,78 @@
+name: Windows Certification
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+jobs:
+  certification:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install JS deps
+        run: npm ci
+
+      - name: Build extension (Vite)
+        run: npm run build
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit tests (Vitest)
+        run: npm test
+
+      - name: Mock E2E (Playwright Chromium)
+        run: |
+          npx playwright install chromium
+          npm run e2e
+
+      - name: Build native host (release)
+        run: cargo build --release --manifest-path native-host/Cargo.toml
+
+      - name: Build cert fixture helper (debug)
+        run: cargo build --manifest-path native-host/Cargo.toml --bin cert_fixture
+
+      - name: Install (HKCU Chrome+Edge + host manifest)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
+
+      - name: Strict verify-install (Both)
+        run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install.ps1
+
+      - name: Native host certification (subprocess protocol)
+        run: node tests/real-native-host-test.mjs
+
+      - name: Failure-state certification
+        run: node tests/test-failure-states.mjs
+
+      - name: Real Edge E2E (deterministic fixture + protected vault)
+        run: node tests/real-edge-e2e.mjs
+
+      - name: Real Chrome E2E (deterministic fixture + protected vault)
+        run: node tests/real-chrome-e2e.mjs
+
+      - name: Uninstall / DB preservation check
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1
+          powershell -NoProfile -Command "if (-not (Test-Path \"$env:APPDATA\CopyIt\copyit.db\")) { throw \"DB was incorrectly deleted on uninstall\" }; Write-Host \"DB preserved after uninstall: $env:APPDATA\CopyIt\copyit.db\""
+          powershell -NoProfile -Command "if (Test-Path \"HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Chrome registry not removed\" }; if (Test-Path \"HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Edge registry not removed\" }; Write-Host \"Registry clean after uninstall\""
+
+      - name: Reinstall + verify + smoke E2E
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install.ps1
+          node tests/real-edge-e2e.mjs
+          node tests/real-chrome-e2e.mjs

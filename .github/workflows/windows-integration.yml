@@ -1,5 +1,10 @@
 name: Windows Integration
-on: { workflow_dispatch: {}, push: { branches: ["feature/**"] } }
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
 jobs:
   integration:
     runs-on: windows-latest

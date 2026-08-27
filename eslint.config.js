@@ -32,6 +32,6 @@ export default tseslint.config(
   {
     // Unit, E2E and integration tests run under Node and include browser evaluation contexts.
     files: ["extension/tests/**/*.ts", "tests/**/*.{ts,js,mjs,cjs}"],
-    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    languageOptions: { globals: { ...globals.browser, ...globals.node, chrome: "readonly" } },
   },
 );
