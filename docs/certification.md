@@ -1,6 +1,6 @@
 # CopyIt Browser Extension V1 — Certification Ledger
 
-**Status:** LOCAL RELEASE GATES RUNTIME-VERIFIED — required post-push GitHub Actions runs are pending.
+**Status:** V1 RELEASE-CERTIFIED — local gates, manual Chrome acceptance, and all three required GitHub Actions workflows are green for the pushed release candidate.
 
 **Campaign:** `2026-08-28` hardening campaign, executed on `main` on 2026-08-31.
 
@@ -15,15 +15,15 @@ password, derived key, or ciphertext is recorded here.
 ## Release decision
 
 All local product, native-host, desktop compatibility, browser, security,
-performance, and install-lifecycle gates below are runtime-verified. The final
-release classification remains contingent on the required GitHub Actions runs
-at the pushed revision. If those runs are green, the evidence supports:
+performance, install-lifecycle, and documentation gates are runtime-verified.
+The pushed release candidate also has green CI, Windows Integration, and
+Windows Certification workflows. The final release classification is:
 
 ```text
 V1 RELEASE-CERTIFIED
 ```
 
-The Chrome Stable command-line automation path remains explicitly:
+Chrome Stable command-line automation remains explicitly:
 
 ```text
 Chrome Stable automated functional gate: NOT-RUN / ENVIRONMENT-BLOCKED
@@ -49,6 +49,8 @@ the same database.
 | Extension branch | `main` |
 | Extension starting SHA | `95c5b98cf3eae9ccaa40b2f4ae2e8c10534ce615` |
 | Extension hardening commit | `707b50a` (`fix(ci): restore pinned Rust and certification gates`) |
+| Release candidate evidence SHA | `2b8eaa1895076e03fce5ef53d1b2f23a960202e5` |
+| GitHub Actions | CI run `33378008025`; Windows Integration run `33378008040`; Windows Certification run `33378008113` — all `success` |
 | Desktop branch | `feature/copyit-v1-completion-20260828` |
 | Desktop compatibility revision | `c36e138ce7a6153906347699384ec901369fc5b8` |
 | OS | Windows 11 Pro, build 26200 |
@@ -228,6 +230,7 @@ cargo audit
 ```
 
 The Chrome Stable command-line probe is expected to return exit 2 when the
+
 installed branded Chrome blocks unpacked extension automation. The workflow
 accepts only that explicit environment-blocked code, labels the step
 `NOT-RUN / ENVIRONMENT-BLOCKED`, and still fails on every other nonzero code.
@@ -255,3 +258,19 @@ historical evidence. They contain stale branch/version claims and are not the
 current release decision. This document is the current certification record;
 the companion ledger below preserves the prior snapshot separately from the
 2026-08-31 rerun.
+
+## Final certification record
+
+```text
+Extension release candidate: 2b8eaa1895076e03fce5ef53d1b2f23a960202e5
+CI: success (33378008025)
+Windows Integration: success (33378008040)
+Windows Certification: success (33378008113)
+Chrome Stable automated functional: NOT-RUN / ENVIRONMENT-BLOCKED
+Chrome Stable manual acceptance: PASS
+Edge Stable functional: PASS (36/36)
+Chromium functional: PASS (36/36; Chromium only)
+Install lifecycle: PASS
+Final decision: V1 RELEASE-CERTIFIED
+Open P0/P1 defects: none
+```

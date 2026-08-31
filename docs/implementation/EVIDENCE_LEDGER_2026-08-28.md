@@ -123,10 +123,16 @@ automation wrapper converts only the script's explicit exit code 2 to a
 successful workflow step labelled `NOT-RUN / ENVIRONMENT-BLOCKED`; all other
 nonzero results fail the job.
 
-The required post-push GitHub Actions conclusions are not recorded until the
-final commit is pushed. The final release classification must remain
-`V1 RELEASE-CERTIFIED` only after CI, Windows Integration, and Windows
-Certification are green.
+The required post-push GitHub Actions runs are runtime-verified for release
+candidate `2b8eaa1895076e03fce5ef53d1b2f23a960202e5`: CI
+`33378008025`, Windows Integration `33378008040`, and Windows Certification
+`33378008113` all concluded `success`.
+
+The final release classification is:
+
+```text
+V1 RELEASE-CERTIFIED
+```
 
 ## Historical 2026-08-28 snapshot (superseded)
 

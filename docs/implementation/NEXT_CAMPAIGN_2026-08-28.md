@@ -484,4 +484,8 @@ The local remediation and certification pass is recorded in
 build/test gates, native failure handling, cross-repository contract,
 real-Edge/Chromium coverage, explicit Chrome automation/manual results,
 isolated install lifecycle, security checks, and documentation updates.
-Required post-push GitHub Actions conclusions remain the final release gate.
+The required post-push GitHub Actions conclusions are runtime-verified for
+release candidate `2b8eaa1895076e03fce5ef53d1b2f23a960202e5`: CI
+`33378008025`, Windows Integration `33378008040`, and Windows Certification
+`33378008113` all concluded `success`. The campaign completion criteria are
+satisfied; final classification: `V1 RELEASE-CERTIFIED`.
