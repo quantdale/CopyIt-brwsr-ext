@@ -4,7 +4,84 @@ This ledger records executable evidence for the coordinated browser-extension
 and desktop campaign. It intentionally separates source evidence, runtime
 evidence, and environment-blocked evidence. No prompt body, password, key, or
 ciphertext is recorded here.
-## Current release rerun — 2026-08-31
+## Post-release hardening rerun — 2026-08-31
+
+This section is authoritative for the current `main` state after the
+post-release hardening campaign. The prior release rerun remains below as
+historical evidence. The hardening commit is
+`61db731523b9af56b84953d1ee31e38a97ebf6b8`, based on the certified
+`fdaeeb4` release. No prompt body, password, derived key, or ciphertext is
+recorded here.
+
+### Current hardening gates
+
+| Command / gate | Result | Evidence |
+| --- | --- | --- |
+| `npm run build` | PASS | icon validation, TypeScript, and Vite production bundle |
+| `npx tsc --noEmit` | PASS | current source |
+| `npm run lint` | PASS | 0 errors, 0 warnings |
+| `npm test` | PASS; 32 tests | 6 Vitest files |
+| `npm run e2e` | PASS; 24 tests | production bundle; timeout, disconnect, late-response, unlock, and popup-race coverage |
+| native `cargo fmt` | PASS | `--check` |
+| native `cargo clippy` | PASS | all targets/features, `-D warnings` |
+| native `cargo test` | PASS; 85 unit + 6 subprocess tests | current native host |
+| native release build | PASS | release host built |
+| native integration wrapper | PASS | both Cargo suites |
+| `npm run cert:failure` | PASS; 5/5 | wrong origin, unsupported schema, oversized frame |
+| `npm run cert:chromium` | PASS | bundled Chromium; Chromium evidence only |
+| `npm run cert:edge` | PASS | real Edge Stable; isolated fixture |
+| `npm run benchmark:performance` | PASS | shell 51.45 ms; first-page and 10k-search targets met |
+| `npm audit` (both requested modes) | PASS | zero vulnerabilities |
+| native `cargo audit` | PASS | no findings |
+| companion CopyIt gates | PASS | shared schema/vault compatibility, tests, simulations, and release build |
+
+### Current hardening behavior evidence
+
+- Retryable migration/database initialization errors are no longer cached;
+  the same host process recovers after the migration lock clears. Terminal
+  legacy/schema failures remain cached and fail closed.
+- Repeated log rotation replaces the prior `.old` file and truncates the
+  active file if replacement is unavailable; writes remain capped at
+  256 KiB.
+- Browser responses require protocol version 1, a valid request ID, boolean
+  `ok`, and a complete success or failure envelope. Unknown or late IDs are
+  ignored safely.
+- Unlock uses a 10-second method-specific timeout. Measurements stayed below
+  340 ms for first attempts and were about 2.33 s for a correct attempt after
+  six failures; timeout recovery checks `hello` before changing UI state.
+- The vault password input uses `autocomplete="off"`. Browser password
+  managers may override this hint; no saved-credential profile was configured
+  for this hardening rerun, so manager-specific suppression is not claimed.
+- Search covers title, description, category, and plaintext bodies only.
+  Protected bodies remain unavailable to list/search and are never decrypted
+  during listing.
+- Icon validation confirms exact 16×16, 48×48, and 128×128 RGBA PNG assets.
+
+### Current install and workflow evidence
+
+An isolated lifecycle using disposable `APPDATA`/`LOCALAPPDATA` passed install,
+strict verification, native/failure/Chromium/Edge certification, performance,
+uninstall data-preservation hashes, reinstall, strict verification, and final
+cleanup. The real Chrome install/origin gate passed against the installed
+Chrome executable and exact deterministic origin. Branded Chrome functional
+automation remains `NOT-RUN / ENVIRONMENT-BLOCKED`; the prior GUI acceptance is
+historical evidence and was not rerun for this hardening-only pass.
+
+The post-push workflows for `61db731` all concluded `success`:
+
+```text
+CI: 33392921147
+Windows Integration: 33392921206
+Windows Certification: 33392921184
+```
+
+### Current hardening classification
+
+```text
+POST-RELEASE HARDENING COMPLETE
+```
+
+## Prior release rerun — 2026-08-31 (superseded)
 
 This section supersedes the older snapshot below. It records the final
 campaign rerun on extension `main` after starting at

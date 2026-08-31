@@ -152,7 +152,7 @@ npm run mcp:preflight && npm run mcp:validate
 - `.mcp.json` — repo-local MCP servers, pinned: `chrome-devtools-mcp@1.8.0` (headless), `context7@4.0.3`.
 - `scripts/verify-install.ps1` — strict gate: manifest `key` present and base64, derived ID is 32 chars and equals the committed ID, release exe exists, host manifest `name`/`type`/absolute existing `path`, **exactly one** matching `allowed_origins`, HKCU keys point at that manifest, and `--self-test` passes for both the installed and built binaries.
 - `docs/certification.md` — current release decision and evidence matrix.
-- `docs/implementation/EVIDENCE_LEDGER_2026-08-28.md` — command-by-command evidence; the `## Current release rerun` section supersedes the historical snapshot below it.
+- `docs/implementation/EVIDENCE_LEDGER_2026-08-28.md` — command-by-command evidence; the `## Post-release hardening rerun` section supersedes the historical snapshots below it.
 - `IMPLEMENTATION_PLAN.md`, `docs/agent-integrations/*` — **historical** design/handoff context. Do not treat their unchecked boxes as missing features.
 
 ## Runtime/Tooling Preferences
@@ -168,10 +168,10 @@ npm run mcp:preflight && npm run mcp:validate
 
 | Tier | Location | Invocation | Proves |
 | --- | --- | --- | --- |
-| Unit (TS) | `extension/tests/*.test.ts` (6 files, 23 tests) | `npm test` | Module logic in jsdom via injected `Transport` |
-| Mock E2E | `tests/e2e/popup.spec.ts` (12 tests) | `npm run e2e` | The built popup bundle: races, retry, lock failure, a11y |
-| Unit (Rust) | in-file `#[cfg(test)] mod tests` (79 tests) | `cargo test` | Framing, protocol, db, vault, migration, legacy, origin |
-| Subprocess | `native-host/tests/subprocess.rs` (4 tests) | `cargo test` | Real binary over real framing, incl. empty-library clear-all |
+| Unit (TS) | `extension/tests/*.test.ts` (6 files, 32 tests) | `npm test` | Module logic in jsdom via injected `Transport` |
+| Mock E2E | `tests/e2e/popup.spec.ts` (24 tests) | `npm run e2e` | The built popup bundle: races, retry, lock failure, a11y |
+| Unit (Rust) | in-file `#[cfg(test)] mod tests` (85 tests) | `cargo test` | Framing, protocol, db, vault, migration, legacy, origin |
+| Subprocess | `native-host/tests/subprocess.rs` (6 tests) | `cargo test` | Real binary over real framing, incl. empty-library clear-all and retry recovery |
 | Failure states | `tests/test-failure-states.mjs` (5) | `npm run cert:failure` | Wrong origin, unsupported schema + clean EOF, oversized frame |
 | Real browser | `tests/real-edge-e2e.mjs`, `chromium-functional-e2e.mjs`, `real-chrome-e2e.mjs` (36 checks each) | `npm run cert:edge` / `cert:chromium` / `cert:chrome` | Full journey against production `extension/dist` + real host |
 | Performance | `tests/performance-benchmark.mjs` | `npm run benchmark:performance` | Popup shell, first-100 metadata, 10k title search |

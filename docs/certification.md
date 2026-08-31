@@ -1,8 +1,8 @@
 # CopyIt Browser Extension V1 — Certification Ledger
 
-**Status:** V1 RELEASE-CERTIFIED — local gates, manual Chrome acceptance, and all three required GitHub Actions workflows are green for the pushed release candidate.
+**Status:** POST-RELEASE HARDENING VERIFIED — the hardening implementation and all three required GitHub Actions workflows are green on `main`.
 
-**Campaign:** `2026-08-28` hardening campaign, executed on `main` on 2026-08-31.
+**Campaign:** `2026-08-31` post-release hardening rerun, executed on `main` after the V1 release certification.
 
 **Repositories:** `quantdale/CopyIt-brwsr-ext` and sibling `quantdale/CopyIt`
 
@@ -12,7 +12,74 @@ identity, Chromium functional equivalence, Edge Stable functional E2E, Chrome
 Stable automation, and Chrome Stable manual acceptance. No prompt body,
 password, derived key, or ciphertext is recorded here.
 
+## Post-release hardening rerun — 2026-08-31
+
+This section is authoritative for the current hardening release. The
+release-candidate snapshot below remains preserved as historical evidence.
+The hardening implementation started from the certified `fdaeeb4` release and
+is committed at `61db731523b9af56b84953d1ee31e38a97ebf6b8`. No prompt body,
+password, derived key, or ciphertext is recorded here.
+
+| Item | Current evidence |
+| --- | --- |
+| Extension branch | `main` |
+| Hardening SHA | `61db731523b9af56b84953d1ee31e38a97ebf6b8` |
+| GitHub Actions | CI `33392921147`; Windows Integration `33392921206`; Windows Certification `33392921184` — all `success` |
+| TypeScript/Vitest | TypeScript PASS; Vitest 6 files, 32 tests |
+| Popup production-path E2E | Playwright PASS; 24 tests against the built bundle |
+| Native host tests | Cargo PASS; 85 unit tests and 6 subprocess tests |
+| Native integration | PASS; wrapper and both Cargo suites |
+| Failure-state certification | PASS; 5/5 |
+| Unlock timing | Measured first attempts below 340 ms; correct unlock after six failures about 2.33 s; method-specific timeout is 10 s |
+| Icons | Validator PASS; exact 16×16, 48×48, and 128×128 RGBA PNGs |
+| Search semantics | Protected bodies remain unavailable to list/search; plaintext body search remains supported |
+| Install lifecycle | PASS in disposable `APPDATA`/`LOCALAPPDATA`: install, strict verify, native/failure/browser gates, uninstall preservation, reinstall, strict verify |
+| npm audit | PASS; zero vulnerabilities in both requested modes |
+| Native cargo audit | PASS; no findings |
+| Companion CopyIt | PASS; shared schema/vault gates and desktop tests/build remain green |
+
+The browser boundary now rejects malformed response envelopes and protocol
+version mismatches. Normal native requests retain a 3.5-second timeout;
+`unlockVault` uses a 10-second timeout and reconciles with `hello` after a
+timeout before changing browser vault state. The vault password field uses
+`autocomplete="off"`; this discourages browser autofill but cannot override
+password managers. No saved-credential profile was configured for this rerun,
+so manager-specific suppression is not claimed.
+
+The real Chrome command-line functional probe remains
+`NOT-RUN / ENVIRONMENT-BLOCKED`; branded Chrome rejected Playwright extension
+flags. The prior visible Chrome GUI acceptance is retained as
+`HISTORICAL-EVIDENCE` and was not rerun during this hardening-only pass.
+Bundled Chromium and Edge evidence remain separate from Chrome evidence.
+
 ## Release decision
+All confirmed code-level hardening findings are resolved. Local build,
+browser, native, security, performance, lifecycle, documentation, and
+companion gates passed; the pushed hardening commit has green CI, Windows
+Integration, and Windows Certification workflows. The current release
+classification is:
+
+```text
+POST-RELEASE HARDENING COMPLETE
+```
+
+Chrome Stable automated functional coverage remains explicitly:
+
+```text
+Chrome Stable automated functional gate: NOT-RUN / ENVIRONMENT-BLOCKED
+```
+
+The canonical data contract remains:
+
+```text
+%APPDATA%\CopyIt\copyit.db
+```
+
+There is no live JSON/SQLite dual-write path. Legacy JSON is migration input
+only; the desktop app is the canonical SQLite writer and the native host reads
+the same database.
+
+## Historical release-candidate decision (superseded)
 
 All local product, native-host, desktop compatibility, browser, security,
 performance, install-lifecycle, and documentation gates are runtime-verified.
@@ -42,7 +109,7 @@ There is no live JSON/SQLite dual-write path. Legacy JSON is migration input
 only; the desktop app is the canonical SQLite writer and the native host reads
 the same database.
 
-## Repository and toolchain state
+## Historical release-candidate repository and toolchain state
 
 | Item | Evidence |
 | --- | --- |
@@ -68,7 +135,7 @@ the same database.
 The extension ID is derived from the committed manifest key by
 `scripts/get-extension-id.mjs`. It is not inferred from a browser run.
 
-## Current local evidence matrix
+## Historical release-candidate evidence matrix
 
 | Area | State | Evidence |
 | --- | --- | --- |
@@ -96,7 +163,7 @@ The extension ID is derived from the committed manifest key by
 | Native cargo audit | PASS | `cargo audit` from `native-host`; no findings |
 | Desktop cargo audit | PASS with documented warnings | command exits 0; five visible unmaintained/unsound warnings remain documented in the companion audit policy |
 
-## Chrome evidence and investigation
+## Historical release-candidate Chrome evidence and investigation
 
 The real-Chrome automation probe used only the installed executable and
 isolated browser/data profiles. Playwright launch flags
@@ -130,7 +197,7 @@ Chrome Stable manual acceptance: PASS
 The automated result remains separately recorded as
 `NOT-RUN / ENVIRONMENT-BLOCKED`; it is never promoted to an automated PASS.
 
-## Chrome Stable manual acceptance procedure
+## Historical Chrome Stable manual acceptance procedure
 
 Run this procedure only in an isolated Chrome profile and with a disposable
 fixture root:
@@ -157,7 +224,7 @@ The result must be recorded separately from automated Chrome and Chromium
 results as either `Chrome Stable manual acceptance: PASS` or
 `Chrome Stable manual acceptance: NOT-RUN`.
 
-## Cross-repository and data-safety evidence
+## Historical cross-repository and data-safety evidence
 
 - `SCHEMA_V1` in desktop `src/sqlite.rs` and native-host `src/db.rs` matched
   byte-for-byte: 1,656 bytes, schema version 1.
@@ -253,24 +320,23 @@ accepts only that explicit environment-blocked code, labels the step
 
 ## Historical evidence note
 
-The older 2026-08-28 report and ledger entries remain in Git history as
-historical evidence. They contain stale branch/version claims and are not the
-current release decision. This document is the current certification record;
-the companion ledger below preserves the prior snapshot separately from the
-2026-08-31 rerun.
+The older release-candidate sections below and the 2026-08-28 ledger
+snapshot remain preserved as historical evidence. They are not the current
+release decision. The post-release hardening section at the top is authoritative
+for current `main`.
 
 ## Final certification record
 
 ```text
-Extension release candidate: 2b8eaa1895076e03fce5ef53d1b2f23a960202e5
-CI: success (33378008025)
-Windows Integration: success (33378008040)
-Windows Certification: success (33378008113)
+Extension hardening SHA: 61db731523b9af56b84953d1ee31e38a97ebf6b8
+CI: success (33392921147)
+Windows Integration: success (33392921206)
+Windows Certification: success (33392921184)
 Chrome Stable automated functional: NOT-RUN / ENVIRONMENT-BLOCKED
-Chrome Stable manual acceptance: PASS
-Edge Stable functional: PASS (36/36)
-Chromium functional: PASS (36/36; Chromium only)
+Chrome Stable manual acceptance: HISTORICAL-EVIDENCE (not rerun for hardening)
+Edge Stable functional: PASS
+Chromium functional: PASS (Chromium only)
 Install lifecycle: PASS
-Final decision: V1 RELEASE-CERTIFIED
-Open P0/P1 defects: none
+Final decision: POST-RELEASE HARDENING COMPLETE
+Open P0/P1/P2 defects: none
 ```
