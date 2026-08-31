@@ -1,6 +1,6 @@
 # CopyIt Browser Extension — One-Shot Implementation Plan
 
-> **Status:** Approved implementation blueprint
+> **Status:** Historical V1 implementation blueprint. The implementation is consolidated on `main`; use `AGENTS.md`, `docs/certification.md`, and the current campaign/evidence ledger for present-day status.
 >
 > **Primary repository:** `quantdale/CopyIt-brwsr-ext`
 >

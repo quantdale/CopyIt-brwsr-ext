@@ -5,6 +5,8 @@ Implements the two `RECOMMEND` add-ons from
 as **repository-local MCP servers**. Additive only: no existing integration was
 touched and no global/user-wide configuration was mutated.
 
+> **Historical handoff:** The Phase 0 branch/HEAD inventory below records the add-on implementation snapshot from 2026-08-28. It is not the current release branch or certification evidence; the extension release is now consolidated on `main`. See `docs/certification.md` for current status.
+
 ## Phase 0 — Repo truth
 
 - Implementation HEAD: `5d678f6` (branch `main`). The topic branches

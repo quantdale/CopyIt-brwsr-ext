@@ -5,6 +5,10 @@
 **Audited baseline:** `main` at `3f56f5d0594fde87329e0877efe854da0a37c12b`  
 **Companion contract inspected:** `quantdale/CopyIt`, branch `feature/sqlite-browser-extension-compat`  
 **Campaign type:** **Combined implementation + hardening**, hardening-dominant
+**Execution note (2026-08-31):** The remediation campaign has been executed
+from the audited baseline. The findings and unverified runtime statements
+below describe the pre-remediation audit snapshot; current executable results
+are recorded in `EVIDENCE_LEDGER_2026-08-28.md` and `../certification.md`.
 
 ## 1. Executive decision
 
@@ -472,3 +476,12 @@ The project may be called complete for V1 only when all of the following are tru
 14. any remaining work is documented, genuinely non-blocking, and not deferred merely because the session ended.
 
 If these criteria are satisfied, stop rather than inventing another feature campaign.
+
+## 9. Execution closure — 2026-08-31
+
+The local remediation and certification pass is recorded in
+`EVIDENCE_LEDGER_2026-08-28.md`. It verifies the P0/P1 findings, deterministic
+build/test gates, native failure handling, cross-repository contract,
+real-Edge/Chromium coverage, explicit Chrome automation/manual results,
+isolated install lifecycle, security checks, and documentation updates.
+Required post-push GitHub Actions conclusions remain the final release gate.

@@ -5,7 +5,7 @@
 **IMPLEMENTED — 2026-08-28. See `REPOSITORY_LOCAL_ADDONS_IMPLEMENTATION.md` for files, pinned versions, activation, validation and preservation audit.**
 
 Target repository: `quantdale/CopyIt-brwsr-ext`  
-Planning branch: `plan/repo-local-addons-2026-08-28`
+Historical planning branch: `plan/repo-local-addons-2026-08-28` (the implementation is now on `main`)
 
 ## Repository assessment
 

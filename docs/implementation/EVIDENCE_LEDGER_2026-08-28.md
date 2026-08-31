@@ -4,6 +4,131 @@ This ledger records executable evidence for the coordinated browser-extension
 and desktop campaign. It intentionally separates source evidence, runtime
 evidence, and environment-blocked evidence. No prompt body, password, key, or
 ciphertext is recorded here.
+## Current release rerun — 2026-08-31
+
+This section supersedes the older snapshot below. It records the final
+campaign rerun on extension `main` after starting at
+`95c5b98cf3eae9ccaa40b2f4ae2e8c10534ce615`. The CI/certification hardening
+commit is `707b50a` (`fix(ci): restore pinned Rust and certification gates`).
+The companion contract was verified at
+`c36e138ce7a6153906347699384ec901369fc5b8` on branch
+`feature/copyit-v1-completion-20260828`. No prompt body, password, derived
+key, or ciphertext is recorded here.
+
+### Current environment
+
+| Tool or runtime | Version / identity |
+| --- | --- |
+| OS | Windows 11 Pro build 26200 |
+| Node/npm | Node `v24.3.0`, npm `11.4.2` |
+| Rust/rustup/Cargo | rustc/cargo `1.93.1`, rustup `1.29.0` |
+| cargo-audit | `0.22.1` |
+| Vite/Vitest | Vite `8.2.2`, Vitest `4.1.11` |
+| Chrome Stable | `C:\Program Files\Google\Chrome\Application\chrome.exe`, `151.0.7922.174` |
+| Edge Stable | `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, `151.0.4129.107` |
+| Playwright Chromium | bundled executable, `151.0.7922.34` |
+| Extension ID | `mmiopnfmhmmlmhcdjklelfcdahmgchfc` |
+| Native host | `com.quantdale.copyit` |
+| Allowed origin | `chrome-extension://mmiopnfmhmmlmhcdjklelfcdahmgchfc/` only |
+
+### Current runtime gates
+
+| Command / gate | Result | Evidence |
+| --- | --- | --- |
+| `npm ci` | PASS | clean lockfile install |
+| `npm run build` | PASS | production Vite bundle |
+| `npx tsc --noEmit` | PASS | TypeScript check |
+| `npm run lint` | PASS | 0 errors, 0 warnings |
+| `npm test` | PASS; 23 tests | 6 Vitest files |
+| `npx playwright install chromium` | PASS | bundled browser available |
+| `npm run e2e` | PASS; 12 tests | real built popup bundle; race, retry, lock failure, accessibility, and failure-state coverage |
+| native `cargo fmt` | PASS | `--check` |
+| native `cargo clippy` | PASS | all targets/features, `-D warnings` |
+| native `cargo test` | PASS; 83 tests | 5 suites |
+| native release build | PASS | release host built |
+| native integration wrapper | PASS | both Cargo commands check `$LASTEXITCODE`; subprocess suite passed |
+| `npm run mcp:preflight` | PASS | chrome-devtools and context7 discovered |
+| `npm run mcp:validate` | PASS; 2/2 | capability validation |
+| `npm run cert:native` | PASS; 28 pass, 1 skip | isolated fixture; pagination skipped because fixture has 3 rows |
+| `npm run cert:failure` | PASS; 5/5 | wrong origin, unsupported schema including clean EOF, oversized frame |
+| `npm run cert:chrome-install` | PASS | Chrome executable/version, deterministic ID, exact origin |
+| `npm run cert:chromium` | PASS; 36/36 | bundled Chromium only |
+| `npm run cert:edge` | PASS; 36/36 | actual Edge Stable 151.0.4129.107 |
+| `npm run benchmark:performance` | PASS | shell 75.13 ms; first 100 metadata 67.47/39.75/78.79 ms at 100/1,000/10,000 rows; 10k search 48.29 ms |
+| `npm audit --audit-level=high` | PASS | zero vulnerabilities |
+| `npm audit --omit=dev --audit-level=high` | PASS | zero vulnerabilities |
+| `cargo audit` in `native-host` | PASS | no findings |
+| desktop `cargo audit` | PASS with documented warnings | exit 0; five visible unmaintained/unsound warnings remain documented in the companion policy |
+
+### Chrome evidence
+
+The installed Chrome command-line functional probe is explicitly
+`NOT-RUN / ENVIRONMENT-BLOCKED`. Chrome 151 rejected the Playwright
+`--load-extension` and `--disable-extensions-except` switches, and popup
+navigation returned `net::ERR_BLOCKED_BY_CLIENT`. The probe used no Chromium
+substitution and did not weaken the manifest key, native allowed origin, or
+browser security settings.
+
+The separate real Chrome manual acceptance passed. In a disposable visible
+Chrome profile, the extension was loaded through the actual
+`chrome://extensions` Developer mode and native folder picker using the exact
+`extension/dist` bundle. The popup then passed native connectivity, list,
+search, category, exact plaintext copy, locked protected copy, wrong-password
+rejection without clipboard/body leakage, successful unlock, exact protected
+copy, password clearing, relock, storage checks, console checks, and isolated
+native-log checks.
+
+```text
+Chrome Stable automated functional gate: NOT-RUN / ENVIRONMENT-BLOCKED
+Chrome Stable manual acceptance: PASS
+```
+
+### Cross-repository and data-safety evidence
+
+- Desktop and native-host `SCHEMA_V1` literals matched byte-for-byte: 1,656
+  bytes, schema version 1.
+- Desktop `empty_reconcile_removes_every_snippet` and native
+  `host_observes_empty_canonical_library_after_clear_all` passed.
+- Desktop fmt/check/clippy/tests/simulations/release build passed:
+  `cargo test` 146 and `sim_journeys` 18.
+- Native and desktop migration/vault tests passed, including corrupt versus
+  missing JSON, idempotence, recoverable backups, atomic install, protected
+  payload preservation, schema refusal, WAL/integrity checks, and the shared
+  vault vector.
+- Certification fixtures used temporary directories. The helper refuses a
+  fixture root under `APPDATA`; Windows certification also sets and validates
+  disposable `APPDATA`/`LOCALAPPDATA` descendants of `RUNNER_TEMP`.
+- The isolated lifecycle passed install, strict verify, real Edge smoke,
+  uninstall, registry/assets cleanup, DB and legacy-backup hash preservation,
+  reinstall, strict verify, second Edge smoke, and final cleanup. Existing
+  real-user DB and legacy backup hashes matched before and after the local
+  certification install cleanup.
+- Native stdout remained protocol-only; no exercised browser storage,
+  console, stderr, or isolated log contained protected plaintext, password,
+  derived key, or ciphertext.
+
+The first one-off local lifecycle probe stopped on a test-harness assertion
+that checked the empty parent directory rather than the installed host
+directory. The assertion was corrected before the release-like lifecycle was
+rerun; the corrected lifecycle and the committed workflow check the exact
+installed host path and passed.
+
+### Workflow policy
+
+All three workflows now pass `toolchain: 1.93.1` and
+`components: rustfmt, clippy` to the pinned dtolnay action. Actions remain
+immutable SHA references. Certification cleanup still runs with `if:
+always()`, while reinstall runs only with `if: success()`. The Chrome
+automation wrapper converts only the script's explicit exit code 2 to a
+successful workflow step labelled `NOT-RUN / ENVIRONMENT-BLOCKED`; all other
+nonzero results fail the job.
+
+The required post-push GitHub Actions conclusions are not recorded until the
+final commit is pushed. The final release classification must remain
+`V1 RELEASE-CERTIFIED` only after CI, Windows Integration, and Windows
+Certification are green.
+
+## Historical 2026-08-28 snapshot (superseded)
 
 ## Scope and starting points
 

@@ -2,7 +2,7 @@
 
 Personal Chrome/Edge companion for [CopyIt](https://github.com/quantdale/CopyIt): a compact browser-toolbar prompt picker backed by the same local CopyIt library (search, copy, clipboard). It reads/searches/copies prompts and never injects into websites.
 
-The current coordinated V1 implementation is developed on `feature/copyit-v1-completion-20260828`. This README explains how to build, install, use, and uninstall it. Deep design, migration semantics, and truthful certification evidence live in the docs.
+The current coordinated V1 implementation is developed on `main`. This README explains how to build, install, use, and uninstall it. Deep design, migration semantics, and truthful certification evidence live in the docs.
 
 - `IMPLEMENTATION_PLAN.md` — approved architecture, SQLite migration, native-messaging protocol, popup UX, security, install tooling, tests, CI, and acceptance criteria.
 - `docs/protocol.md` — wire protocol (framing, envelope, methods, error codes, origin defense, logging).

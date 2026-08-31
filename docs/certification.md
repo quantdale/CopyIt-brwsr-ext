@@ -1,16 +1,36 @@
 # CopyIt Browser Extension V1 — Certification Ledger
 
-**Status:** FINAL EVIDENCE RECORDED — implementation is complete, but the full release decision is **NOT CERTIFIED** because Chrome Stable functional automation is environment-blocked and manual Chrome acceptance was not performed.
+**Status:** LOCAL RELEASE GATES RUNTIME-VERIFIED — required post-push GitHub Actions runs are pending.
 
-**Campaign:** `2026-08-28` (`feature/copyit-v1-completion-20260828`)
+**Campaign:** `2026-08-28` hardening campaign, executed on `main` on 2026-08-31.
 
 **Repositories:** `quantdale/CopyIt-brwsr-ext` and sibling `quantdale/CopyIt`
 
-The previous version of this file claimed that a Chromium-equivalent run was a real Chrome functional E2E. That claim is superseded. Git history preserves the earlier report; this file is the current evidence ledger and uses only the states `PASS`, `FAIL`, and `NOT-RUN / ENVIRONMENT-BLOCKED`.
+The prior ledger conflated bundled Chromium with real Chrome functional
+coverage. That record is superseded. This ledger separates Chrome install
+identity, Chromium functional equivalence, Edge Stable functional E2E, Chrome
+Stable automation, and Chrome Stable manual acceptance. No prompt body,
+password, derived key, or ciphertext is recorded here.
 
 ## Release decision
 
-**NOT CERTIFIED.** All deterministic, native-host, desktop, Chromium, Edge, install, and audit gates below were rerun. The installed Chrome executable was attempted separately and returned `ERR_BLOCKED_BY_CLIENT` while loading the unpacked extension. Manual Chrome acceptance was not performed, so no Chrome functional PASS is claimed.
+All local product, native-host, desktop compatibility, browser, security,
+performance, and install-lifecycle gates below are runtime-verified. The final
+release classification remains contingent on the required GitHub Actions runs
+at the pushed revision. If those runs are green, the evidence supports:
+
+```text
+V1 RELEASE-CERTIFIED
+```
+
+The Chrome Stable command-line automation path remains explicitly:
+
+```text
+Chrome Stable automated functional gate: NOT-RUN / ENVIRONMENT-BLOCKED
+```
+
+The separate interactive Chrome acceptance passed, so the automation
+limitation is not being hidden or relabelled as Chromium evidence.
 
 The canonical data contract remains:
 
@@ -18,79 +38,156 @@ The canonical data contract remains:
 %APPDATA%\CopyIt\copyit.db
 ```
 
-There is no live JSON/SQLite dual-write path. Legacy JSON is read only for the verified, recoverable migration into SQLite.
+There is no live JSON/SQLite dual-write path. Legacy JSON is migration input
+only; the desktop app is the canonical SQLite writer and the native host reads
+the same database.
 
-## Environment and identity
+## Repository and toolchain state
 
 | Item | Evidence |
 | --- | --- |
-| OS | Windows 11 Pro, build 26200 (local machine; record again in final report) |
-| Node/npm | Node v24.3.0 / npm 11.4.2 |
-| Rust/Cargo | rustc/cargo 1.93.1 |
-| cargo-audit | 0.22.1 |
-| Vite/Vitest | Vite 8.2.2 / Vitest 4.1.11 |
-| Chrome Stable | `C:\Program Files\Google\Chrome\Application\chrome.exe`, 151.0.7922.174; install/origin PASS, functional automation environment-blocked |
-| Edge Stable | `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, 151.0.4129.101; functional PASS |
-| Playwright Chromium | bundled executable, 151.0.7922.34; functional PASS as Chromium only |
+| Extension branch | `main` |
+| Extension starting SHA | `95c5b98cf3eae9ccaa40b2f4ae2e8c10534ce615` |
+| Extension hardening commit | `707b50a` (`fix(ci): restore pinned Rust and certification gates`) |
+| Desktop branch | `feature/copyit-v1-completion-20260828` |
+| Desktop compatibility revision | `c36e138ce7a6153906347699384ec901369fc5b8` |
+| OS | Windows 11 Pro, build 26200 |
+| Node/npm | Node `v24.3.0` / npm `11.4.2` |
+| Rust/Cargo | rustc/cargo `1.93.1`; rustup `1.29.0` |
+| cargo-audit | `0.22.1` |
+| Vite/Vitest | Vite `8.2.2` / Vitest `4.1.11` |
+| Chrome Stable | `C:\Program Files\Google\Chrome\Application\chrome.exe`, `151.0.7922.174` |
+| Edge Stable | `C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe`, `151.0.4129.107` |
+| Playwright Chromium | bundled executable, `151.0.7922.34` |
 | Extension ID | `mmiopnfmhmmlmhcdjklelfcdahmgchfc` |
 | Native host | `com.quantdale.copyit` |
 | Allowed origin | `chrome-extension://mmiopnfmhmmlmhcdjklelfcdahmgchfc/` only |
 
-The extension ID is derived from the committed manifest key by `scripts/get-extension-id.mjs`; it is not inferred from a browser run.
+The extension ID is derived from the committed manifest key by
+`scripts/get-extension-id.mjs`. It is not inferred from a browser run.
 
-## Current evidence matrix
+## Current local evidence matrix
 
-| Area | State | Required evidence |
+| Area | State | Evidence |
 | --- | --- | --- |
-| Desktop SQLite empty-library reconciliation | PASS | `empty_reconcile_removes_every_snippet`, desktop full tests, and native clear-all subprocess test |
-| Shared SQLite schema and vault compatibility | PASS | Native-host tests, desktop tests, deterministic fixture, migration/vault vectors |
-| Extension build/type/lint/unit | PASS | build, TypeScript, lint, and 24 Vitest tests |
-| Popup mock E2E | PASS | 12 Playwright tests, including stale-response, protected retry, pagination, accessibility, and failure-state regressions |
-| Performance/accessibility probe | PASS with informational target note | popup shell 382 ms; native first-page metadata under 1 s for 100/1,000/10,000 rows; 10k search 143 ms versus the ~100 ms target |
-| Native host formatting/clippy/tests | PASS | fmt, clippy `-D warnings`, 79 unit + 4 subprocess tests |
-| Native integration wrapper | PASS | `scripts/test-native-integration.ps1` propagated both Cargo suites |
-| Failure-state certification | PASS | wrong origin, future schema, and oversized frame observed fail-closed; 4/4 |
-| Chrome install/origin verification | PASS | actual Chrome executable, manifest key, deterministic ID, exact origin |
-| Chromium functional equivalence | PASS | 36/36 with bundled Chromium explicitly labelled Chromium |
-| Edge Stable real functional E2E | PASS | actual Edge Stable, isolated fixture/native host, 36/36 |
-| Chrome Stable real functional E2E | NOT-RUN / ENVIRONMENT-BLOCKED | actual Chrome only; `ERR_BLOCKED_BY_CLIENT` prevented popup load |
-| Chrome manual acceptance | NOT-RUN | no human Chrome session was performed in this campaign |
-| Install/verify/uninstall/reinstall lifecycle | PASS | database hash preserved; registry and installed host cleaned, then reinstall verified |
-| Supply-chain/advisory evidence | PASS with documented desktop warnings | npm audits clean; native audit clean; desktop audit exception/warnings documented |
+| npm install | PASS | `npm ci` completed from the committed lockfile |
+| Production build | PASS | `npm run build`; Vite 8.2.2 bundle created |
+| TypeScript | PASS | `npx tsc --noEmit` |
+| ESLint | PASS | `npm run lint`; 0 errors and 0 warnings |
+| Vitest | PASS | 6 files, 23 tests |
+| Playwright | PASS | `npm run e2e`; 12 tests |
+| Rust fmt | PASS | `cargo fmt --manifest-path native-host/Cargo.toml -- --check` |
+| Rust clippy | PASS | `cargo clippy ... --all-targets --all-features -- -D warnings` |
+| Rust tests | PASS | 83 tests across 5 native-host suites |
+| Native integration | PASS | `scripts/test-native-integration.ps1`; both Cargo invocations check `$LASTEXITCODE` |
+| Failure-state suite | PASS | `npm run cert:failure`; 5/5, including clean unsupported-schema EOF and bounded oversized-frame rejection |
+| Performance | PASS | popup shell 75.13 ms; first 100 metadata rows 67.47/39.75/78.79 ms at 100/1,000/10,000 rows; 10k title search 48.29 ms |
+| Chrome install/origin | PASS | actual Chrome executable, manifest key, deterministic ID, exact origin |
+| Chromium functional equivalence | PASS | bundled Chromium, 36/36; labelled Chromium only |
+| Edge Stable functional E2E | PASS | actual Edge 151.0.4129.107, isolated fixture/native host, 36/36 |
+| Chrome Stable automated functional E2E | NOT-RUN / ENVIRONMENT-BLOCKED | actual Chrome 151.0.7922.174; `ERR_BLOCKED_BY_CLIENT` while loading the unpacked page; command exits 2 |
+| Chrome Stable manual acceptance | PASS | actual Chrome GUI `chrome://extensions` → Developer mode → Load unpacked using exact `extension/dist`; popup journey passed against an isolated synthetic fixture |
+| Install lifecycle | PASS | isolated APPDATA/LOCALAPPDATA fixture: install, strict verify, Edge smoke, uninstall, DB/backup hash preservation, registry/assets cleanup, reinstall, strict verify, Edge smoke, final cleanup |
+| Uninstall data preservation | PASS | synthetic DB and legacy backup hashes were unchanged; real user DB and existing legacy backup hashes were also unchanged |
+| Desktop CopyIt compatibility | PASS | shared schema/vault source comparison, empty reconciliation test, full desktop tests, simulations, and release build |
+| npm audit | PASS | `npm audit --audit-level=high` and `npm audit --omit=dev --audit-level=high`; zero vulnerabilities |
+| Native cargo audit | PASS | `cargo audit` from `native-host`; no findings |
+| Desktop cargo audit | PASS with documented warnings | command exits 0; five visible unmaintained/unsound warnings remain documented in the companion audit policy |
 
-## Required functional behavior
+## Chrome evidence and investigation
 
-The final evidence must show all of the following against the production bundle and production native host paths:
+The real-Chrome automation probe used only the installed executable and
+isolated browser/data profiles. Playwright launch flags
+`--load-extension` and `--disable-extensions-except` were rejected by branded
+Chrome 151; Chrome emitted diagnostics that those switches are not allowed in
+Google Chrome, and direct popup navigation returned
+`net::ERR_BLOCKED_BY_CLIENT`. No extension-loading security policy or
+`allowed_origins` check was weakened.
 
-- compact title-only rows; no prompt body preview in the DOM or browser storage;
-- optional description available only through the text-only tooltip;
-- search and category filtering with stale response protection;
-- exact plaintext copy and visible copy feedback;
-- protected copy opens unlock, wrong passwords do not copy, successful unlock retries the original snippet exactly once, and the password field is cleared;
-- lock failures leave the UI in the previous state and show an error;
-- native host stdout contains protocol frames only, while errors are bounded and safe;
-- no prompt bodies, passwords, derived keys, or ciphertext secrets are written to logs.
+The manual acceptance used a separate visible Chrome profile and the actual
+Chrome extensions manager. The directory was selected through the native
+Chrome folder picker, not through command-line extension flags. The following
+journey passed with a disposable synthetic database and no user data:
 
-## Required data-safety evidence
+1. popup loaded with the expected ID and native host connection;
+2. deterministic prompt list, search, and category filtering;
+3. exact plaintext clipboard copy;
+4. locked protected copy prompt;
+5. wrong-password rejection with unchanged clipboard and no body in DOM;
+6. successful unlock, exact protected copy, cleared password field;
+7. relock and protected-access gating;
+8. zero persistent browser storage, zero console errors, and safe isolated
+   native log.
 
-The final report must include deterministic evidence for:
+This is the required explicit result:
 
-- missing versus corrupt legacy JSON behavior;
-- idempotent migration, recovery backup, atomic install, counts, IDs, ordering, protection metadata, vault metadata, and `PRAGMA integrity_check`;
-- canonical SQLite access from both desktop and native host;
-- deleting the final desktop snippet and observing an empty native-host list;
-- preservation of `%APPDATA%\CopyIt\copyit.db`, WAL/SHM sidecars, and legacy backups during uninstall;
-- disposable fixture directories for all certification runs, including CI. No certification fixture may write the user's real `%APPDATA%\CopyIt` database.
+```text
+Chrome Stable manual acceptance: PASS
+```
 
-## Commands and evidence capture
+The automated result remains separately recorded as
+`NOT-RUN / ENVIRONMENT-BLOCKED`; it is never promoted to an automated PASS.
 
-Run from the extension repository after `npm ci` and after rebuilding the native binaries:
+## Chrome Stable manual acceptance procedure
+
+Run this procedure only in an isolated Chrome profile and with a disposable
+fixture root:
+
+1. Run `npm ci` and `npm run build`.
+2. Build the native host and register it with `scripts/install.ps1`.
+3. Create the deterministic synthetic fixture with the `cert_fixture` helper;
+   never point the fixture at the real `%APPDATA%\CopyIt`.
+4. Open Chrome Stable and navigate to `chrome://extensions`.
+5. Enable Developer mode, choose **Load unpacked**, and select the exact
+   `extension/dist` directory.
+6. Confirm the loaded extension ID is
+   `mmiopnfmhmmlmhcdjklelfcdahmgchfc`.
+7. Open the popup and verify native connectivity, list/search/category
+   behavior, exact plaintext copy, locked protected-copy gating, wrong
+   password rejection, successful unlock with the disposable fixture
+   credential, exact protected copy, password clearing, relock, and blocked
+   protected access after relock.
+8. Inspect popup storage, console output, native stderr/logs, registry, and
+   the exact single allowed origin. Record only booleans/counts/hashes; never
+   record fixture bodies or credentials.
+
+The result must be recorded separately from automated Chrome and Chromium
+results as either `Chrome Stable manual acceptance: PASS` or
+`Chrome Stable manual acceptance: NOT-RUN`.
+
+## Cross-repository and data-safety evidence
+
+- `SCHEMA_V1` in desktop `src/sqlite.rs` and native-host `src/db.rs` matched
+  byte-for-byte: 1,656 bytes, schema version 1.
+- Both sides use the same SQLite tables, protection CHECK constraint, WAL,
+  foreign keys, busy timeout, and schema refusal behavior.
+- Desktop `reconcile_snippets` explicitly deletes all rows for an empty
+  in-memory library; `empty_reconcile_removes_every_snippet` passes.
+- Native subprocess `host_observes_empty_canonical_library_after_clear_all`
+  passes, proving clear-all visibility across the shared database.
+- Desktop and native vault implementations use the shared Argon2id,
+  XChaCha20-Poly1305, canary, nonce, salt, base64, and committed vector
+  contract. Both repositories' relevant tests and release builds pass.
+- Migration tests cover missing versus corrupt JSON, idempotence, atomic
+  install, unique recoverable backups, IDs/order/counts, protected payload
+  preservation, vault metadata, integrity checks, and unsupported schemas.
+- All browser certification fixtures use temporary directories. The helper
+  refuses to create a fixture when the temporary root is under `APPDATA`; the
+  Windows certification workflow also requires `APPDATA` and `LOCALAPPDATA`
+  to be descendants of `RUNNER_TEMP`.
+- Native stdout is protocol-only in browser mode. Native stderr, browser
+  console, isolated logs, and browser storage contained no protected body,
+  password, derived key, or ciphertext value in the exercised journeys.
+
+## Required commands
+
+Extension repository, after `npm ci` and rebuilding native binaries:
 
 ```powershell
 npm run build
 npx tsc --noEmit
-npm test
 npm run lint
+npm test
 npx playwright install chromium
 npm run e2e
 
@@ -99,21 +196,26 @@ cargo clippy --manifest-path native-host/Cargo.toml --all-targets --all-features
 cargo test --manifest-path native-host/Cargo.toml --all-targets --all-features
 cargo build --release --manifest-path native-host/Cargo.toml
 
-npm run cert:chrome-install
+npm run mcp:preflight
+npm run mcp:validate
 npm run cert:native
+npm run cert:failure
 npm run cert:chromium
 npm run cert:edge
-npm run cert:chrome
-npm run cert:failure
+npm run cert:chrome-install
 npm run benchmark:performance
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-native-integration.ps1
 
 npm audit --audit-level=high
 npm audit --omit=dev --audit-level=high
-cargo audit --manifest-path native-host/Cargo.toml
+cargo audit
 ```
 
-Run the companion desktop gates from `D:\Documents\tryPython\CopyIt`:
+`cargo audit` is run from `native-host` because cargo-audit 0.22.1 does not
+accept Cargo's `--manifest-path` option. The invalid option form is not used
+as a substitute for the passing audit.
+
+Companion desktop repository:
 
 ```powershell
 cargo fmt -- --check
@@ -122,37 +224,34 @@ cargo clippy --all-targets -- -D warnings
 cargo test
 cargo test --bin copyit sim_journeys -- --test-threads 1
 cargo build --release
+cargo audit
 ```
 
-Record each command's exit code and the exact browser/tool version. Do not turn an environment block, timeout, manual process kill, or skipped optional smoke into PASS. The full command-by-command record is in `docs/implementation/EVIDENCE_LEDGER_2026-08-28.md`.
+The Chrome Stable command-line probe is expected to return exit 2 when the
+installed branded Chrome blocks unpacked extension automation. The workflow
+accepts only that explicit environment-blocked code, labels the step
+`NOT-RUN / ENVIRONMENT-BLOCKED`, and still fails on every other nonzero code.
 
-## Browser result policy
+## Browser and security policy
 
-- `cert:chrome-install` proves only the executable, manifest key, deterministic ID, and origin contract.
-- `cert:chromium` is functional Chromium evidence and must never be called Chrome evidence.
-- `cert:edge` is real Edge evidence.
-- `cert:chrome` is real Chrome Stable functional evidence only. It must exit nonzero with `NOT-RUN / ENVIRONMENT-BLOCKED` when Chrome cannot load the unpacked extension under automation.
-- Manual Chrome acceptance is a separate result and requires an actual Chrome session; it cannot be inferred from Chromium or Edge.
+- `cert:chrome-install` proves only executable identity, manifest key,
+  deterministic ID, and exact origin.
+- `cert:chromium` is bundled Chromium evidence and must never be called Chrome
+  evidence.
+- `cert:edge` is real Edge Stable evidence.
+- `cert:chrome` is real Chrome Stable automation evidence only; an environment
+  block is nonzero and is not a functional PASS.
+- Manual Chrome acceptance is a separate result and cannot be inferred from
+  Chromium or Edge.
+- The manifest requests only `nativeMessaging` and `clipboardWrite`; it has no
+  `tabs`, `activeTab`, `scripting`, or broad host permissions.
+- Uninstall removes only HKCU native-host registration and installed host
+  assets. It does not delete `copyit.db`, WAL/SHM sidecars, or legacy backups.
 
-## Historical report note
+## Historical evidence note
 
-The superseded report was intentionally replaced because it conflated Chromium-equivalent evidence with real Chrome certification and logged synthetic secret values in some stale binaries. Refer to Git history for the original text; do not use its READY verdict or PASS counts as current evidence.
-
-## Final certification record
-
-This section records the final coordinated commits and their truthful evidence:
-
-```text
-Extension branch: `feature/copyit-v1-completion-20260828`
-Extension final commit: `fb768343294456f864f1493f001d95bc4052822d`
-Desktop branch: `feature/copyit-v1-completion-20260828`
-Desktop final commit: `c36e138ce7a6153906347699384ec901369fc5b8`
-Final decision: NOT CERTIFIED — Chrome Stable functional/manual evidence unavailable
-Chrome Stable functional: NOT-RUN / ENVIRONMENT-BLOCKED (`ERR_BLOCKED_BY_CLIENT`)
-Chrome manual acceptance: NOT-RUN
-Edge Stable functional: PASS (36/36)
-Install lifecycle: PASS
-Desktop simulation: PASS (18/18)
-Open P0/P1 defects:
-  none; remaining limitation is environment/manual Chrome evidence, not an identified product defect
-```
+The older 2026-08-28 report and ledger entries remain in Git history as
+historical evidence. They contain stale branch/version claims and are not the
+current release decision. This document is the current certification record;
+the companion ledger below preserves the prior snapshot separately from the
+2026-08-31 rerun.
