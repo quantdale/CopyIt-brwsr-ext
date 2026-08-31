@@ -180,7 +180,6 @@ function showOverlay(title: string, message: string, returnFocus?: HTMLElement):
 
 function hideOverlay(): void {
   setHidden(els.overlay, true);
-  els.vaultPassword.value = "";
   // Clear password buffer
   els.vaultPassword.value = "";
   const returnFocus = overlayReturnFocus;
