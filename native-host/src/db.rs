@@ -21,9 +21,30 @@ pub enum DbError {
     #[error("integrity check failed: {0}")]
     Integrity(String),
     #[error("sqlite error: {0}")]
-    Rusqlite(#[from] rusqlite::Error),
+    Rusqlite(rusqlite::Error),
     #[error("io error: {0}")]
     Io(#[from] std::io::Error),
+}
+
+pub(crate) fn is_busy_sqlite_error(error: &rusqlite::Error) -> bool {
+    matches!(
+        error,
+        rusqlite::Error::SqliteFailure(failure, _)
+            if matches!(
+                failure.code,
+                rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked
+            )
+    )
+}
+
+impl From<rusqlite::Error> for DbError {
+    fn from(error: rusqlite::Error) -> Self {
+        if is_busy_sqlite_error(&error) {
+            DbError::Busy
+        } else {
+            DbError::Rusqlite(error)
+        }
+    }
 }
 
 impl DbError {
@@ -33,6 +54,7 @@ impl DbError {
         match self {
             DbError::Busy => ErrorCode::DatabaseBusy,
             DbError::UnsupportedSchemaVersion { .. } => ErrorCode::UnsupportedSchemaVersion,
+            DbError::Rusqlite(error) if is_busy_sqlite_error(error) => ErrorCode::DatabaseBusy,
             _ => ErrorCode::DatabaseUnavailable,
         }
     }
@@ -513,6 +535,25 @@ mod tests {
                 supported: 1
             }
         ));
+    }
+
+    #[test]
+    fn sqlite_busy_and_locked_errors_are_retryable() {
+        for code in [
+            rusqlite::ErrorCode::DatabaseBusy,
+            rusqlite::ErrorCode::DatabaseLocked,
+        ] {
+            let sqlite = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error {
+                    code,
+                    extended_code: code as i32,
+                },
+                None,
+            );
+            let error = DbError::from(sqlite);
+            assert!(matches!(error, DbError::Busy));
+            assert_eq!(error.error_code(), crate::protocol::ErrorCode::DatabaseBusy);
+        }
     }
 
     #[test]

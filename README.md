@@ -37,6 +37,18 @@ Key decisions:
 - no browser-owned duplicate database, no cloud/backend/telemetry, no website injection;
 - minimal permissions: `["nativeMessaging", "clipboardWrite"]` only;
 - per-user (no admin) Chrome/Edge Native Messaging host with a deterministic extension ID.
+- retryable native initialization failures (`migration_in_progress` and
+  `database_busy`) are retried on the next request; terminal initialization
+  failures remain cached and fail closed;
+- browser responses are checked for the v1 envelope before pending requests are
+  resolved, and incompatible protocol versions produce an actionable error;
+- normal native requests use a 3.5 second timeout; `unlockVault` uses a
+  method-specific 10 second budget and reconciles the vault state after a
+  timeout;
+- protected snippet bodies are not searchable; listings search title,
+  description, category, and only unprotected plaintext bodies;
+- the vault password field uses `autocomplete="off"` and is cleared after
+  success, cancellation, and overlay dismissal.
 
 ## Requirements
 
@@ -53,6 +65,9 @@ cargo build --release --manifest-path native-host/Cargo.toml
 ```
 
 The extension (unpacked, MV3) is produced in `extension/dist/`; the native host in `native-host/target/release/copyit-native-host.exe`.
+`npm run build` also runs `npm run icons:validate`, which verifies the bundled
+CopyIt PNG assets are real 8-bit RGBA images at exactly 16×16, 48×48, and
+128×128 before producing `extension/dist/`.
 
 ## Install the native host (no admin)
 

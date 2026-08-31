@@ -14,6 +14,27 @@
 ## Native host
 - Validates `protocolVersion == 1`, `requestId` echo, method, params.
 - Caps responses at 900 KiB (< 1 MB browser limit).
-- `listSnippets` never returns bodies/ciphertext; LIKE is parameterized with `ESCAPE '\'` and bound params.
-- `getSnippetBody` refuses `vault_locked` until `unlockVault` succeeds; `invalid_password` has small backoff.
+- `listSnippets` never returns bodies/ciphertext; its parameterized `LIKE`
+  search covers title, description, category, and unprotected plaintext bodies.
+  Protected bodies are stored empty and are never decrypted for search.
+- `getSnippetBody` refuses `vault_locked` until `unlockVault` succeeds;
+  `invalid_password` has small backoff.
 - Derived key zeroized on `lockVault`/disconnect/exit (`zeroize` crate).
+- Browser-side `NativeClient` accepts only a complete v1 response envelope:
+  malformed responses are rejected, incompatible versions are reported
+  explicitly, and late/unknown request IDs cannot settle another operation.
+- Retryable initialization errors (`migration_in_progress` and
+  `database_busy`) are not cached as terminal host failures. Corrupt legacy
+  data and other deterministic migration failures remain fail-closed.
+- Diagnostic logging has a 256 KiB active-file cap. Startup rotation replaces
+  the single `.old` backup; if replacement fails, the active file is truncated
+  instead of growing without bound.
+
+## Popup credential handling
+- The vault password input uses `autocomplete="off"` because it is an
+  application-specific unlock secret, not an account-login credential. This
+  discourages browser autofill/save flows while preserving normal keyboard
+  entry; third-party password managers may still override the hint.
+- The popup clears the password after successful unlock, cancellation, and
+  overlay dismissal. The password and derived key are never placed in browser
+  storage.

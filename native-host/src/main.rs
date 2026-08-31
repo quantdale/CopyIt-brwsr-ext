@@ -148,7 +148,8 @@ impl Host {
         }
     }
 
-    /// Lazily opens/migrates the canonical database exactly once per process.
+    /// Lazily opens/migrates the canonical database. Terminal failures are
+    /// cached; retryable failures are returned without poisoning the process.
     fn connection(&mut self) -> Result<&rusqlite::Connection, (ErrorCode, String)> {
         if self.conn.is_none() && self.init_failure.is_none() {
             let started = std::time::Instant::now();
@@ -168,6 +169,7 @@ impl Host {
                 }
                 Err(e) => {
                     let code = e.error_code();
+                    let retryable = e.is_retryable();
                     self.logger.log(
                         "error",
                         "migration",
@@ -177,7 +179,9 @@ impl Host {
                         ],
                     );
                     let msg = safe_migration_message(&e);
-                    self.init_failure = Some((code, msg.clone()));
+                    if !retryable {
+                        self.init_failure = Some((code, msg.clone()));
+                    }
                     return Err((code, msg));
                 }
             }

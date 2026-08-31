@@ -1,4 +1,4 @@
-import { NativeClient } from "./native-client.js";
+import { NativeClient, UNLOCK_TIMEOUT_MS } from "./native-client.js";
 import type { SnippetMeta, CategoryInfo } from "./protocol.js";
 import { AppState, initialState } from "./state.js";
 import { Tooltip } from "./tooltip.js";
@@ -228,7 +228,32 @@ async function handleCopy(id: number, btn: HTMLButtonElement): Promise<void> {
   }
 }
 
+async function finishUnlock(): Promise<void> {
+  els.vaultPassword.value = "";
+  state.vaultState = "unlocked";
+  updateVaultUI();
+  const pending = pendingCopy;
+  pendingCopy = null;
+  hideOverlay();
+  if (pending) {
+    // Retry the original operation exactly once using its captured button.
+    await handleCopy(pending.id, pending.button);
+  }
+}
+
+async function reconcileVaultAfterTimeout(): Promise<boolean> {
+  try {
+    const hello = (await client.request("hello")) as { vaultState?: string };
+    if (hello.vaultState !== "unlocked") return false;
+    await finishUnlock();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function handleUnlock(): Promise<void> {
+  if (els.vaultUnlock.disabled) return;
   let password = els.vaultPassword.value;
   if (!password) {
     els.vaultError.textContent = "Password required";
@@ -237,21 +262,15 @@ async function handleUnlock(): Promise<void> {
   }
   els.vaultUnlock.disabled = true;
   try {
-    await client.request("unlockVault", { password });
-    // Clear password buffers
-    els.vaultPassword.value = "";
-    state.vaultState = "unlocked";
-    updateVaultUI();
-    const pending = pendingCopy;
-    pendingCopy = null;
-    hideOverlay();
-    if (pending) {
-      // Retry the original operation exactly once using its captured button.
-      await handleCopy(pending.id, pending.button);
-    }
+    await client.request("unlockVault", { password }, UNLOCK_TIMEOUT_MS);
+    await finishUnlock();
   } catch (e) {
     const err = e as Error & { code?: string };
-    els.vaultError.textContent = err.code === "invalid_password" ? "Wrong password. Try again." : err.message || "Unlock failed";
+    if (err.code === "native_host_timeout" && await reconcileVaultAfterTimeout()) return;
+    const message = err.code === "native_host_timeout"
+      ? "Unlock timed out. Check the vault state and try again."
+      : err.message || "Unlock failed";
+    els.vaultError.textContent = err.code === "invalid_password" ? "Wrong password. Try again." : message;
     els.vaultError.classList.remove("hidden");
     els.vaultPassword.focus();
     els.vaultPassword.select();
@@ -312,7 +331,21 @@ async function init(): Promise<void> {
   client.onDisconnect((msg) => {
     state.hostUnavailable = true;
     state.error = msg || "Native host disconnected";
+    if (state.vaultState === "unlocked") {
+      state.vaultState = "locked";
+      updateVaultUI();
+    }
     renderList();
+  });
+  window.addEventListener("pagehide", () => {
+    if (searchTimer !== null) {
+      clearTimeout(searchTimer);
+      searchTimer = null;
+    }
+    pendingCopy = null;
+    els.vaultPassword.value = "";
+    tooltip.destroy();
+    client.disconnect();
   });
 
   els.search.addEventListener("input", onSearchInput);

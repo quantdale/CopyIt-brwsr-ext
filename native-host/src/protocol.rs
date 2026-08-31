@@ -104,7 +104,7 @@ impl ErrorCode {
         }
     }
 
-    fn retryable(self) -> bool {
+    pub fn retryable(self) -> bool {
         matches!(
             self,
             ErrorCode::DatabaseBusy | ErrorCode::MigrationInProgress
@@ -281,6 +281,21 @@ mod tests {
         let v = serde_json::to_value(Response::failure("r", ErrorCode::DatabaseBusy)).unwrap();
         assert_eq!(v["error"]["retryable"], true);
         assert_eq!(v["error"]["code"], "database_busy");
+    }
+
+    #[test]
+    fn retryability_matrix_matches_the_wire_contract() {
+        for code in [ErrorCode::DatabaseBusy, ErrorCode::MigrationInProgress] {
+            assert!(code.retryable(), "{} must be retryable", code.as_str());
+        }
+        for code in [
+            ErrorCode::LegacyDataCorrupt,
+            ErrorCode::UnsupportedSchemaVersion,
+            ErrorCode::MigrationFailed,
+            ErrorCode::DatabaseUnavailable,
+        ] {
+            assert!(!code.retryable(), "{} must be terminal", code.as_str());
+        }
     }
 
     #[test]

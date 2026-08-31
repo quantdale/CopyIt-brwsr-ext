@@ -47,8 +47,14 @@ Rules:
 - `protocolVersion != 1` → `unsupported_protocol_version`.
 - Unknown method → `unknown_method`; malformed params → `invalid_params`.
 - `requestId` is echoed verbatim (max 128 chars).
+- A success response has `ok: true` and a `result` field; a failure response
+  has `ok: false` and an `error` object with string `code`, string `message`,
+  and boolean `retryable`. A response never carries both `result` and `error`.
 - Error text is stable and user-safe: no paths, SQL, bodies, or passwords.
 - `retryable` is true only for `database_busy` and `migration_in_progress`.
+- The browser client independently validates the complete response envelope.
+  It rejects malformed messages, reports unsupported versions clearly, and
+  ignores late or unknown request IDs.
 
 ## Methods
 
@@ -71,8 +77,9 @@ Canonical categories with snippet counts, dropdown order preserved.
 ### `listSnippets`
 
 Params: `{ query?, category?, offset?, limit? }` (limit default 100, hard cap
-200; query/category length caps 512/256). Server-side SQL search across title,
-description, category, plaintext body. Result metadata only:
+200; query/category length caps 512/256). Server-side SQL search covers title,
+description, category, and plaintext body for unprotected snippets only. Result
+metadata only:
 
 ```json
 { "items": [ { "id": 123, "title": "…", "description": "…",

@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "tsc --noEmit && vite build && node -e \"const fs=require('fs'); fs.mkdirSync('extension/dist/icons',{recursive:true}); fs.copyFileSync('extension/manifest.json','extension/dist/manifest.json'); for(const f of ['icon16.png','icon48.png','icon128.png']) try{fs.copyFileSync('extension/icons/'+f,'extension/dist/icons/'+f)}catch(e){}\"",
+    "build": "npm run icons:validate && tsc --noEmit && vite build && node -e \"const fs=require('fs'); fs.mkdirSync('extension/dist/icons',{recursive:true}); fs.copyFileSync('extension/manifest.json','extension/dist/manifest.json'); for(const f of ['icon16.png','icon48.png','icon128.png']) try{fs.copyFileSync('extension/icons/'+f,'extension/dist/icons/'+f)}catch(e){}\"",
+    "icons:validate": "node scripts/validate-icons.mjs",
     "dev": "vite build --watch",
     "test": "vitest run --reporter=verbose",
     "test:ui": "vitest --ui",

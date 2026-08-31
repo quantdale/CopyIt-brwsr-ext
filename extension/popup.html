@@ -29,7 +29,7 @@
           <h2 id="overlay-title" class="overlay-title">Unlock vault</h2>
           <p id="overlay-message" class="overlay-message">Enter password to copy this protected prompt.</p>
           <label class="field-label" for="vault-password">Password</label>
-          <input id="vault-password" class="field" type="password" autocomplete="current-password" />
+          <input id="vault-password" class="field" type="password" autocomplete="off" aria-describedby="vault-error" />
           <p id="vault-error" class="field-error hidden" role="alert"></p>
           <div class="overlay-actions">
             <button id="vault-cancel" class="btn" type="button">Cancel</button>

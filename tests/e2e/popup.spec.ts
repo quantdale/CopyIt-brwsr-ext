@@ -95,6 +95,7 @@ function installMock(): void {
       protected: false,
     }));
     const listeners: Array<(msg: unknown) => void> = [];
+    let disconnectListener: (() => void) | null = null;
     const port = {
       postMessage: (req: { method: string; requestId: string; params?: Record<string, unknown> }) => {
         const method = req.method;
@@ -105,20 +106,24 @@ function installMock(): void {
         const fail = (code: string, message: string, delay = 5) =>
           emit({ protocolVersion: 1, requestId: id, ok: false, error: { code, message, retryable: false } }, delay);
         switch (method) {
-          case "hello":
+          case "hello": {
             if (new URLSearchParams(window.location.search).get("mode") === "host-error") {
               return fail("database_unavailable", "CopyIt native host is not installed or registered.");
             }
+            const mode = new URLSearchParams(window.location.search).get("mode");
             return ok({
               protocolVersion: 1,
               hostVersion: "0.1.0",
               supportedSchemaVersion: 1,
               dbSchemaVersion: 1,
-              vaultState: "not_configured",
+              vaultState: mode === "unlock-timeout" || mode === "timeout-locked"
+                ? (state().vaultUnlocked ? "unlocked" : "locked")
+                : "not_configured",
               migrationStatus: "ready",
               dbReady: true,
               lastErrorCode: null,
             });
+          }
           case "listCategories":
             return ok({ categories: [{ name: "Git", count: 2 }, { name: "Prompt", count: 1 }] });
           case "listSnippets":
@@ -137,9 +142,10 @@ function installMock(): void {
               });
               const offset = Number(req.params?.offset ?? 0);
               const pageSize = Number(req.params?.limit ?? 100);
+              const mode = new URLSearchParams(window.location.search).get("mode");
               // Delay one deliberately stale response so the test exercises the
               // production generation guard rather than a mock-only debounce.
-              const delay = query === "a" ? 250 : 5;
+              const delay = mode === "slow-list" ? 200 : query === "a" ? 250 : 5;
               return ok({
                 items: filteredItems.slice(offset, offset + pageSize),
                 total: filteredItems.length,
@@ -148,14 +154,23 @@ function installMock(): void {
                 hasMore: offset + pageSize < filteredItems.length,
               }, delay);
             }
-          case "unlockVault":
+          case "unlockVault": {
             if (req.params?.password !== "correct horse battery staple") return fail("invalid_password", "Invalid password");
-            state().vaultUnlocked = true;
-            return ok({ vaultState: "unlocked" });
+            const mode = new URLSearchParams(window.location.search).get("mode");
+            if (mode !== "timeout-locked") state().vaultUnlocked = true;
+            const delay = mode === "slow-unlock"
+              ? 4000
+              : mode === "timeout-locked"
+                ? 11000
+                : 5;
+            return ok({ vaultState: "unlocked" }, delay);
+          }
           case "getSnippetBody": {
             const idNum = Number((req.params ?? {}).id);
             if (idNum === 2 && !state().vaultUnlocked) return fail("vault_locked", "Vault is locked");
-            return ok({ body: `cdn-body-${idNum}` });
+            const mode = new URLSearchParams(window.location.search).get("mode");
+            const delay = mode === "disconnect-retry" && idNum === 2 ? 200 : 5;
+            return ok({ body: `cdn-body-${idNum}` }, delay);
           }
           case "lockVault":
             if ((window as unknown as { __lockFailure: boolean }).__lockFailure) return fail("database_busy", "Database is busy");
@@ -168,12 +183,14 @@ function installMock(): void {
         }
       },
       onMessage: { addListener: (l: (msg: unknown) => void) => listeners.push(l) },
-      onDisconnect: { addListener: () => {} },
+      onDisconnect: { addListener: (l: () => void) => { disconnectListener = l; } },
       disconnect: () => {},
     };
     (window as unknown as { chrome: unknown }).chrome = {
       runtime: { connectNative: () => port, lastError: undefined },
     };
+    const testWindow = window as unknown as { __disconnect: () => void };
+    testWindow.__disconnect = () => disconnectListener?.();
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
       value: { writeText: async (text: string) => copiedSink(text) },
@@ -187,6 +204,11 @@ test.describe("popup (real bundle + mock native transport)", () => {
   });
 
   const gotoPopup = (page: Page, mode?: string) => page.goto(`${basePath}/popup.html${mode ? `?mode=${mode}` : ""}`);
+  const listRequestCount = (page: Page, offset: number) =>
+    page.evaluate((expectedOffset) =>
+      (window as unknown as { __requests: Array<{ method: string; params?: Record<string, unknown> }> }).__requests
+        .filter((request) => request.method === "listSnippets" && Number(request.params?.offset) === expectedOffset).length,
+    offset);
   const rows = (page: Page) => page.locator(".row");
   const copied = (page: Page) =>
     page.evaluate(() => (window as unknown as { __copied: string | null }).__copied);
@@ -269,6 +291,19 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await expect(page.locator(".row-title")).toHaveText(["Secret launch prompt"]);
   });
 
+  test("category changes keep the latest pending list result", async ({ page }) => {
+    await gotoPopup(page, "slow-list");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await page.selectOption("#category-filter", "Git");
+    await page.selectOption("#category-filter", "Prompt");
+    await expect(page.locator(".row-title")).toHaveText(
+      ["Secret launch prompt", "Summarize conversation"],
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(250);
+    await expect(page.locator(".row-title")).toHaveText(["Secret launch prompt", "Summarize conversation"]);
+  });
+
   test("100+ results paginate without losing title-only rows", async ({ page }) => {
     await gotoPopup(page);
     await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
@@ -278,8 +313,10 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await page.locator("#list").evaluate((element) => {
       element.scrollTop = element.scrollHeight;
       element.dispatchEvent(new Event("scroll"));
+      element.dispatchEvent(new Event("scroll"));
     });
     await expect(rows(page)).toHaveCount(125, { timeout: 5000 });
+    await expect.poll(() => listRequestCount(page, 100)).toBe(1);
     await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
     await expect(page.locator(".snippet-body")).toHaveCount(0);
   });
@@ -304,12 +341,23 @@ test.describe("popup (real bundle + mock native transport)", () => {
     await expect(copyButton).toHaveAttribute("aria-label", "Copy Summarize conversation", { timeout: 2000 });
   });
 
+  test("double-clicking a copy control sends one body request", async ({ page }) => {
+    await gotoPopup(page);
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    const copyButton = rows(page).nth(2).locator(".copy-btn");
+    await copyButton.click({ clickCount: 2 });
+    await expect.poll(() => bodyRequestCount(page, 3)).toBe(1);
+    await expect.poll(() => copied(page)).toBe("cdn-body-3");
+  });
+
   test("unlock dialog traps focus and returns focus after cancel", async ({ page }) => {
     await gotoPopup(page);
     await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
     const protectedButton = rows(page).nth(1).locator(".copy-btn");
     await protectedButton.click();
     await expect(page.locator("#vault-password")).toBeFocused();
+    await expect(page.locator("#vault-password")).toHaveAttribute("autocomplete", "off");
+    await page.fill("#vault-password", "typed-but-cancelled");
 
     await page.keyboard.press("Tab");
     await expect(page.locator("#vault-cancel")).toBeFocused();
@@ -322,20 +370,168 @@ test.describe("popup (real bundle + mock native transport)", () => {
 
     await page.click("#vault-cancel");
     await expect(page.locator("#overlay")).toBeHidden();
+    await expect(page.locator("#vault-password")).toHaveValue("");
     await expect(protectedButton).toBeFocused();
   });
 
   test("protected copy opens the vault overlay and unlock retries the copy once", async ({ page }) => {
     await gotoPopup(page);
     await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
-    await rows(page).nth(1).locator(".copy-btn").click();
+    const protectedButton = rows(page).nth(1).locator(".copy-btn");
+    await protectedButton.click();
     await expect(page.locator("#overlay")).toBeVisible();
+    await expect(page.locator("#vault-password")).toHaveAttribute("autocomplete", "off");
     await page.fill("#vault-password", "correct horse battery staple");
     await page.click("#vault-unlock");
     await expect(page.locator("#overlay")).toBeHidden();
+    await expect(page.locator("#vault-password")).toHaveValue("");
     await expect.poll(() => copied(page)).toBe("cdn-body-2");
     await expect.poll(() => bodyRequestCount(page, 2)).toBe(2);
-    await expect(rows(page).nth(1).locator(".copy-btn")).toHaveText("✓");
+    await expect(protectedButton).toHaveText("✓");
+  });
+
+  test("delayed unlock uses its wider timeout and blocks duplicate submission", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.evaluate(() => (document.getElementById("vault-unlock") as HTMLButtonElement).click());
+    await expect.poll(async () => (await requests(page)).filter((method) => method === "unlockVault")).toHaveLength(1);
+    await expect(page.locator("#overlay")).toBeHidden({ timeout: 15000 });
+    await expect.poll(() => copied(page)).toBe("cdn-body-2");
+  });
+
+  test("copying another row during unlock does not replace the pending copy", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.evaluate(() => {
+      const btn = document.querySelectorAll(".copy-btn")[2] as HTMLButtonElement | undefined;
+      if (btn) btn.click();
+    });
+    await expect.poll(() => bodyRequestCount(page, 3)).toBe(0);
+    await expect(page.locator("#overlay")).toBeHidden({ timeout: 15000 });
+    await expect.poll(() => copied(page)).toBe("cdn-body-2");
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(2);
+  });
+
+  test("searching while unlock is open preserves the pending copy operation", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.evaluate(() => {
+      const input = document.getElementById("search") as HTMLInputElement;
+      input.value = "Secret";
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+    });
+    await expect(page.locator("#overlay")).toBeHidden({ timeout: 15000 });
+    await expect.poll(() => copied(page)).toBe("cdn-body-2");
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(2);
+  });
+
+  test("unlock timeout reconciles a native unlock before retrying the copy", async ({ page }) => {
+    await gotoPopup(page, "unlock-timeout");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await expect(page.locator("#overlay")).toBeHidden({ timeout: 15000 });
+    await expect.poll(() => copied(page)).toBe("cdn-body-2");
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(2);
+  });
+
+  test("unlock timeout keeps the UI locked when native unlock did not complete", async ({ page }) => {
+    await gotoPopup(page, "timeout-locked");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await expect(page.locator("#vault-error")).toHaveText(
+      "Unlock timed out. Check the vault state and try again.",
+      { timeout: 15000 },
+    );
+    await expect(page.locator("#vault-state")).toHaveText("Vault locked");
+    await expect.poll(() => copied(page)).toBeNull();
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(1);
+  });
+
+  test("host disconnect during unlock leaves the vault out of the unlocked state", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.evaluate(() => {
+      const testWindow = window as unknown as { __disconnect: () => void };
+      testWindow.__disconnect();
+    });
+    await expect(page.locator("#vault-error")).toHaveText("Native host disconnected");
+    await expect(page.locator("#vault-state")).not.toHaveText("Vault unlocked");
+  });
+
+  test("disconnect after unlock prevents a retry from claiming success", async ({ page }) => {
+    await gotoPopup(page, "disconnect-retry");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await expect(page.locator("#overlay")).toBeHidden();
+    await page.evaluate(() => {
+      const testWindow = window as unknown as { __disconnect: () => void };
+      testWindow.__disconnect();
+    });
+    await expect(page.locator("#vault-state")).toHaveText("Vault locked");
+    await page.waitForTimeout(300);
+    await expect.poll(() => copied(page)).toBeNull();
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(2);
+  });
+
+  test("a late unlock response does not retry a cancelled copy", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.click("#vault-cancel");
+    await expect(page.locator("#overlay")).toBeHidden();
+    await expect(page.locator("#vault-password")).toHaveValue("");
+    await page.waitForTimeout(4500);
+    await expect.poll(() => copied(page)).toBeNull();
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(1);
+  });
+
+  test("popup teardown clears outstanding operations without retrying", async ({ page }) => {
+    await gotoPopup(page, "slow-unlock");
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await page.evaluate(() => window.dispatchEvent(new Event("pagehide")));
+    await expect(page.locator("#vault-password")).toHaveValue("");
+    await page.waitForTimeout(4500);
+    await expect.poll(() => copied(page)).toBeNull();
+    await expect.poll(() => bodyRequestCount(page, 2)).toBe(1);
+    await expect(page.locator("#vault-state")).not.toHaveText("Vault unlocked");
+  });
+
+  test("host disconnect clears the visible unlocked state", async ({ page }) => {
+    await gotoPopup(page);
+    await expect(rows(page)).toHaveCount(3, { timeout: 5000 });
+    await rows(page).nth(1).locator(".copy-btn").click();
+    await page.fill("#vault-password", "correct horse battery staple");
+    await page.click("#vault-unlock");
+    await expect(page.locator("#overlay")).toBeHidden();
+    await page.evaluate(() => {
+      const testWindow = window as unknown as { __disconnect: () => void };
+      testWindow.__disconnect();
+    });
+    await expect(page.locator("#vault-state")).toHaveText("Vault locked");
+    await expect(page.locator("#lock-vault")).toBeHidden();
   });
 
   test("lock failure remains visible and does not claim the vault is locked", async ({ page }) => {

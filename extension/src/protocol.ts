@@ -51,6 +51,89 @@ export interface FailureEnvelope {
 
 export type ResponseEnvelope<T = unknown> = SuccessEnvelope<T> | FailureEnvelope;
 
+type ResponseValidationFailure = {
+  valid: false;
+  requestId?: string;
+  code: "native_host_internal" | "unsupported_protocol_version";
+  message: string;
+};
+
+export type ResponseValidation =
+  | { valid: true; response: ResponseEnvelope }
+  | ResponseValidationFailure;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isValidRequestId(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 128;
+}
+
+function malformedResponse(requestId?: string): ResponseValidationFailure {
+  return {
+    valid: false,
+    requestId,
+    code: "native_host_internal",
+    message: "Native host returned a malformed response.",
+  };
+}
+
+/** Validates the small, stable response envelope at the browser boundary. */
+export function validateResponseEnvelope(msg: unknown): ResponseValidation {
+  if (!isRecord(msg)) return malformedResponse();
+
+  const requestId = isValidRequestId(msg.requestId) ? msg.requestId : undefined;
+  if (msg.protocolVersion !== 1) {
+    return {
+      valid: false,
+      requestId,
+      code: "unsupported_protocol_version",
+      message: "Native host protocol version is incompatible. Reinstall/update CopyIt.",
+    };
+  }
+  if (!requestId || typeof msg.ok !== "boolean") return malformedResponse(requestId);
+
+  if (msg.ok) {
+    if (!Object.prototype.hasOwnProperty.call(msg, "result") || msg.result === undefined || "error" in msg) {
+      return malformedResponse(requestId);
+    }
+    return {
+      valid: true,
+      response: {
+        protocolVersion: 1,
+        requestId,
+        ok: true,
+        result: msg.result,
+      },
+    };
+  }
+
+  if ("result" in msg || !isRecord(msg.error)) return malformedResponse(requestId);
+  const error = msg.error;
+  if (
+    typeof error.code !== "string"
+    || error.code.length === 0
+    || typeof error.message !== "string"
+    || typeof error.retryable !== "boolean"
+  ) {
+    return malformedResponse(requestId);
+  }
+  return {
+    valid: true,
+    response: {
+      protocolVersion: 1,
+      requestId,
+      ok: false,
+      error: {
+        code: error.code as ErrorCode,
+        message: error.message,
+        retryable: error.retryable,
+      },
+    },
+  };
+}
+
 export interface HelloResult {
   protocolVersion: 1;
   hostVersion: string;

@@ -127,10 +127,18 @@ impl MigrationError {
             MigrationError::LegacyCorrupt { .. } => ErrorCode::LegacyDataCorrupt,
             MigrationError::Db(db_err) => db_err.error_code(),
             MigrationError::LockTimeout => ErrorCode::MigrationInProgress,
+            MigrationError::Sqlite(error) if db::is_busy_sqlite_error(error) => {
+                ErrorCode::DatabaseBusy
+            }
             MigrationError::Sqlite(_) | MigrationError::Io(_) | MigrationError::Verification(_) => {
                 ErrorCode::MigrationFailed
             }
         }
+    }
+
+    /// Retryable failures must not poison the host's lazy initialization.
+    pub fn is_retryable(&self) -> bool {
+        self.error_code().retryable()
     }
 }
 
@@ -727,6 +735,21 @@ fn sweep_stale_temp_migrations(data_dir: &Path) {
 mod tests {
     use super::*;
     use crate::legacy::LegacyProtection;
+    #[test]
+    fn retryability_classification_preserves_terminal_failures() {
+        assert!(MigrationError::LockTimeout.is_retryable());
+        assert!(!MigrationError::LegacyCorrupt {
+            file: "snippets.json",
+            reason: "invalid JSON".into(),
+        }
+        .is_retryable());
+        assert!(!MigrationError::Verification("row mismatch".into()).is_retryable());
+        assert!(!MigrationError::Io(std::io::Error::new(
+            std::io::ErrorKind::PermissionDenied,
+            "denied",
+        ))
+        .is_retryable());
+    }
 
     fn write(path: &Path, contents: &str) {
         std::fs::write(path, contents).unwrap();

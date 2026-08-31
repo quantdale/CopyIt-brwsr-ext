@@ -8,10 +8,13 @@
 
 use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine as _;
-use copyit_native_host::vault;
+use copyit_native_host::{vault, MigrationLock};
 use serde_json::{json, Value};
 use std::io::{Read, Write};
 use std::process::{Child, Command, Stdio};
+use std::sync::mpsc;
+use std::thread;
+use std::time::Duration;
 
 const HOST_BIN: &str = env!("CARGO_BIN_EXE_copyit-native-host");
 const TEST_ORIGIN: &str = "chrome-extension://integrationtestorigin0000000000/";
@@ -241,6 +244,57 @@ fn full_v1_journey_over_real_framing() {
         !data_dir.join("snippets.json").exists(),
         "source JSON renamed to backup"
     );
+}
+
+#[test]
+fn retryable_initialization_failure_recovers_without_restart() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("appdata").join("CopyIt");
+    let log_dir = tmp.path().join("logs");
+    std::fs::create_dir_all(&data_dir).unwrap();
+
+    let (ready_tx, ready_rx) = mpsc::channel();
+    let lock_dir = data_dir.clone();
+    let lock_holder = thread::spawn(move || {
+        let _lock = MigrationLock::acquire(&lock_dir).expect("test acquires migration lock");
+        ready_tx.send(()).unwrap();
+        thread::sleep(Duration::from_secs(20));
+    });
+    ready_rx.recv().unwrap();
+
+    let mut host = HostProcess::spawn(&data_dir, &log_dir);
+    let first = host.request("hello", "retry-h1", json!({}));
+    assert_eq!(first["ok"], true);
+    assert_eq!(first["result"]["dbReady"], false);
+    assert_eq!(first["result"]["lastErrorCode"], "migration_in_progress");
+
+    lock_holder.join().unwrap();
+
+    let second = host.request("hello", "retry-h2", json!({}));
+    assert_eq!(second["ok"], true);
+    assert_eq!(second["result"]["dbReady"], true);
+}
+
+#[test]
+fn terminal_initialization_failure_remains_fail_closed() {
+    let tmp = tempfile::tempdir().unwrap();
+    let data_dir = tmp.path().join("appdata").join("CopyIt");
+    let log_dir = tmp.path().join("logs");
+    std::fs::create_dir_all(&data_dir).unwrap();
+    std::fs::write(data_dir.join("snippets.json"), b"{not valid json").unwrap();
+
+    let mut host = HostProcess::spawn(&data_dir, &log_dir);
+    let first = host.request("hello", "terminal-h1", json!({}));
+    assert_eq!(first["ok"], true);
+    assert_eq!(first["result"]["lastErrorCode"], "legacy_data_corrupt");
+
+    // Repairing the source after the first terminal failure must not make a
+    // poisoned host appear healthy without an explicit restart.
+    std::fs::write(data_dir.join("snippets.json"), b"[]").unwrap();
+    let second = host.request("hello", "terminal-h2", json!({}));
+    assert_eq!(second["ok"], true);
+    assert_eq!(second["result"]["lastErrorCode"], "legacy_data_corrupt");
+    assert_eq!(second["result"]["dbReady"], false);
 }
 
 #[test]
