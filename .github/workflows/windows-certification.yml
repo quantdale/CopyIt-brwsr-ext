@@ -11,10 +11,29 @@ jobs:
   certification:
     runs-on: windows-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Configure disposable certification data roots
+        shell: pwsh
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:RUNNER_TEMP)) { throw "RUNNER_TEMP is unavailable; refusing certification fixture setup" }
+          $runnerRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')
+          $certRoot = [IO.Path]::GetFullPath((Join-Path $runnerRoot "copyit-cert-data")).TrimEnd('\')
+          if (-not $certRoot.StartsWith("$runnerRoot\", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "Certification root is outside RUNNER_TEMP: $certRoot"
+          }
+          if (Test-Path $certRoot) { Remove-Item -LiteralPath $certRoot -Recurse -Force }
+          New-Item -ItemType Directory -Path $certRoot -Force | Out-Null
+          "APPDATA=$certRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "LOCALAPPDATA=$certRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "COPYIT_CERT_EPHEMERAL=1" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master pinned 2026-08-28
+        with:
+          toolchain: 1.93.1
+          components: rustfmt, clippy
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
@@ -47,6 +66,26 @@ jobs:
       - name: Build cert fixture helper (debug)
         run: cargo build --manifest-path native-host/Cargo.toml --bin cert_fixture
 
+      - name: Seed disposable lifecycle database
+        shell: pwsh
+        run: |
+          if ($env:COPYIT_CERT_EPHEMERAL -ne "1") { throw "Certification fixture guard is not enabled" }
+          $runnerRoot = [IO.Path]::GetFullPath($env:RUNNER_TEMP).TrimEnd('\')
+          $certRoot = [IO.Path]::GetFullPath($env:APPDATA).TrimEnd('\')
+          if (-not $certRoot.StartsWith("$runnerRoot\", [StringComparison]::OrdinalIgnoreCase)) {
+            throw "APPDATA is not an ephemeral runner path: $certRoot"
+          }
+          $fixture = Join-Path $env:GITHUB_WORKSPACE "native-host\target\debug\cert_fixture.exe"
+          if (-not (Test-Path $fixture)) { throw "cert_fixture binary missing at $fixture" }
+          & $fixture $certRoot
+          if ($LASTEXITCODE -ne 0) { throw "cert_fixture failed" }
+          $backup = Join-Path $certRoot "CopyIt\snippets.json.legacy-backup-certification"
+          "synthetic legacy backup sentinel" | Set-Content -LiteralPath $backup -Encoding utf8
+          $db = Join-Path $certRoot "CopyIt\copyit.db"
+          if (-not (Test-Path $db)) { throw "fixture database missing at $db" }
+          (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "copyit-cert-db.sha256")
+          (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "copyit-cert-backup.sha256")
+
       - name: Install (HKCU Chrome+Edge + host manifest)
         run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
 
@@ -70,22 +109,71 @@ jobs:
         timeout-minutes: 5
         run: node tests/chromium-functional-e2e.mjs
 
-      - name: Chrome Stable real functional E2E (actual chrome.exe only)
+      - name: Chrome Stable functional automation (actual chrome.exe; NOT-RUN allowed)
         timeout-minutes: 5
-        run: node tests/real-chrome-e2e.mjs
+        shell: pwsh
+        run: |
+          node tests/real-chrome-e2e.mjs
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -eq 2) {
+            Write-Host "Chrome Stable automated functional gate: NOT-RUN / ENVIRONMENT-BLOCKED"
+            exit 0
+          }
+          if ($exitCode -ne 0) { throw "Chrome Stable functional certification failed with exit code $exitCode" }
 
       - name: Uninstall / DB preservation check
         if: always()
+        shell: pwsh
         run: |
+          $db = Join-Path $env:APPDATA "CopyIt\copyit.db"
+          $backup = Join-Path $env:APPDATA "CopyIt\snippets.json.legacy-backup-certification"
+          $installDir = Join-Path $env:LOCALAPPDATA "CopyIt Browser Extension\native-host"
+          $hashFile = Join-Path $env:RUNNER_TEMP "copyit-cert-db.sha256"
+          $backupHashFile = Join-Path $env:RUNNER_TEMP "copyit-cert-backup.sha256"
+          if (-not (Test-Path $hashFile)) { throw "certification DB hash is missing" }
+          if (-not (Test-Path $backupHashFile)) { throw "certification backup hash is missing" }
+          $beforeHash = (Get-Content -LiteralPath $hashFile -Raw).Trim()
+          $beforeBackupHash = (Get-Content -LiteralPath $backupHashFile -Raw).Trim()
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1
-          powershell -NoProfile -Command "if (-not (Test-Path \"$env:APPDATA\CopyIt\copyit.db\")) { throw \"DB was incorrectly deleted on uninstall\" }; Write-Host \"DB preserved after uninstall: $env:APPDATA\CopyIt\copyit.db\""
-          powershell -NoProfile -Command "if (Test-Path \"HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Chrome registry not removed\" }; if (Test-Path \"HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit\") { throw \"Edge registry not removed\" }; Write-Host \"Registry clean after uninstall\""
+          if ($LASTEXITCODE -ne 0) { throw "uninstall script failed" }
+          if (Test-Path $installDir) { throw "installed host assets survived uninstall" }
+          if (-not (Test-Path $db)) { throw "DB was incorrectly deleted on uninstall" }
+          $afterHash = (Get-FileHash -LiteralPath $db -Algorithm SHA256).Hash
+          if ($afterHash -ne $beforeHash) { throw "DB changed during uninstall" }
+          if (-not (Test-Path $backup)) { throw "legacy backup was incorrectly deleted on uninstall" }
+          $afterBackupHash = (Get-FileHash -LiteralPath $backup -Algorithm SHA256).Hash
+          if ($afterBackupHash -ne $beforeBackupHash) { throw "legacy backup changed during uninstall" }
+          Write-Host "DB and legacy backup preserved after uninstall"
+          if (Test-Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit") { throw "Chrome registry not removed" }
+          if (Test-Path "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit") { throw "Edge registry not removed" }
+          Write-Host "Registry clean after uninstall"
 
       - name: Reinstall + verify + browser smoke E2E
-        if: always()
+        if: success()
         timeout-minutes: 5
+        shell: pwsh
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "reinstall script failed" }
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify-install.ps1
+          if ($LASTEXITCODE -ne 0) { throw "reinstall verify failed" }
           node tests/real-edge-e2e.mjs
+
+          if ($LASTEXITCODE -ne 0) { throw "reinstall Edge E2E failed" }
           node tests/real-chrome-e2e.mjs
+          $exitCode = $LASTEXITCODE
+          if ($exitCode -eq 2) {
+            Write-Host "Chrome Stable automated functional gate after reinstall: NOT-RUN / ENVIRONMENT-BLOCKED"
+            exit 0
+          }
+          if ($exitCode -ne 0) { throw "Chrome Stable functional certification after reinstall failed with exit code $exitCode" }
+      - name: Final certification cleanup
+        if: always()
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts/uninstall.ps1
+          if ($LASTEXITCODE -ne 0) { throw "final certification cleanup failed" }
+          $installDir = Join-Path $env:LOCALAPPDATA "CopyIt Browser Extension\native-host"
+          if (Test-Path $installDir) { throw "installed host assets survived final cleanup" }
+          if (Test-Path "HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.quantdale.copyit") { throw "Chrome registry survived final cleanup" }
+          if (Test-Path "HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.quantdale.copyit") { throw "Edge registry survived final cleanup" }

@@ -61,7 +61,7 @@ for (const [id, s] of Object.entries(servers)) {
       `[${id}] command '${cmd}' looks like a global/absolute path (scope violation)`,
     );
   }
-  if (cmd === "npx" && !/@[\w.\-]+/.test(flat)) {
+  if (cmd === "npx" && !/@[\w.-]+/.test(flat)) {
     errors.push(`[${id}] npx invocation does not pin a package version`);
   }
   if (/--browser-url/i.test(flat)) {

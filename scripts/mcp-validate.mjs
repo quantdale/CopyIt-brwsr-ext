@@ -36,7 +36,9 @@ function validateOne(id, spec) {
       clearTimeout(timer);
       try {
         child.kill("SIGKILL");
-      } catch {}
+      } catch {
+        // The child may have exited before the cleanup signal was sent.
+      }
       resolvePromise(res);
     };
     const timer = setTimeout(() => {

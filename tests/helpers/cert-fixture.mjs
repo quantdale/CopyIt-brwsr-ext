@@ -10,7 +10,7 @@
  */
 
 import { mkdtempSync, existsSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { join, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 
@@ -52,6 +52,11 @@ function findFixtureBin() {
  * @returns {{ tmpDir: string, dataDir: string, dbPath: string, cleanup: () => void }}
  */
 export function createCertFixture() {
+  const tempRoot = resolve(tmpdir()).toLowerCase();
+  const appDataRoot = process.env.APPDATA ? resolve(process.env.APPDATA).toLowerCase() : null;
+  if (appDataRoot && (tempRoot === appDataRoot || tempRoot.startsWith(`${appDataRoot}${sep}`))) {
+    throw new Error(`Refusing certification fixture under APPDATA: ${tempRoot}`);
+  }
   const tmpDir = mkdtempSync(join(tmpdir(), "copyit-cert-fixture-"));
   let bin;
   try {

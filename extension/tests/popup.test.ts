@@ -27,14 +27,6 @@ describe("popup copy flow", () => {
     expect(reset).toHaveBeenCalledOnce();
   });
 
-  it("renders safe text via textContent (no innerHTML)", () => {
-    const row = document.createElement("div");
-    const title = document.createElement("div");
-    title.textContent = "<img onerror=alert(1)> Hello";
-    row.appendChild(title);
-    expect(row.innerHTML).not.toContain("<img");
-    expect(title.textContent).toBe("<img onerror=alert(1)> Hello");
-  });
 });
 
 describe("popup search/category", () => {

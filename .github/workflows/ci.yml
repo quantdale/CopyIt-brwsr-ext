@@ -1,4 +1,6 @@
 name: CI
+permissions:
+  contents: read
 on:
   push:
     branches: [main, "feature/**"]
@@ -10,6 +12,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master pinned 2026-08-28
+        with:
+          toolchain: 1.93.1
+          components: rustfmt, clippy
       - run: cargo test --manifest-path native-host/Cargo.toml
       - run: cargo clippy --manifest-path native-host/Cargo.toml --all-targets -- -D warnings
       - run: cargo fmt --manifest-path native-host/Cargo.toml -- --check
@@ -30,6 +35,9 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with: { repository: quantdale/CopyIt, path: CopyIt, ref: c36e138ce7a6153906347699384ec901369fc5b8 } # coordinated SQLite contract commit
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master pinned 2026-08-28
+        with:
+          toolchain: 1.93.1
+          components: rustfmt, clippy
       - run: cargo test --manifest-path CopyIt/Cargo.toml
       - run: cargo clippy --manifest-path CopyIt/Cargo.toml --all-targets -- -D warnings
   e2e:

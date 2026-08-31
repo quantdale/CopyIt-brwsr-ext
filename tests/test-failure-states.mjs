@@ -145,7 +145,14 @@ async function main() {
   }
   futureProc.stdin.end();
   const futureOutcome = await waitForExit(futureProc);
-  if (futureOutcome === null) futureProc.kill();
+  if (futureOutcome?.code === 0 && futureOutcome.signal === null) {
+    pass("failure:unsupported-schema-shutdown — host exited cleanly after EOF");
+  } else if (futureOutcome === null) {
+    fail("failure:unsupported-schema-shutdown", "host remained alive past the bounded shutdown timeout");
+    futureProc.kill();
+  } else {
+    fail("failure:unsupported-schema-shutdown", `unexpected exit outcome: ${JSON.stringify(futureOutcome)}`);
+  }
 
   // 3. Oversized framing rejection
   console.log("\n--- 3. Oversized framing rejection ---");
@@ -178,4 +185,7 @@ async function main() {
   process.exit(results.fail > 0 ? 1 : 0);
 }
 
-main().catch(console.error);
+main().catch((error) => {
+  console.error("Fatal:", error);
+  process.exit(1);
+});

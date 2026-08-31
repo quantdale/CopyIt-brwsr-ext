@@ -1,4 +1,6 @@
 name: Windows Integration
+permissions:
+  contents: read
 on:
   workflow_dispatch: {}
   push:
@@ -14,6 +16,9 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
       - uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # master pinned 2026-08-28
+        with:
+          toolchain: 1.93.1
+          components: rustfmt, clippy
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with: { node-version-file: .node-version, cache: npm }
       - run: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/build.ps1

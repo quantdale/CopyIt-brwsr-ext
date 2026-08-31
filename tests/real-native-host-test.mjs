@@ -2,8 +2,6 @@
 /**
  * Real Native Host Protocol Test
  * ================================
- * This script does exactly what Chrome does when it launches the native messaging host:
- *
  * 1. Reads the host manifest from the registry-registered path
  * 2. Launches the native host executable with the correct origin argument
  * 3. Sends protocol messages via stdin (4-byte length + JSON)
@@ -11,13 +9,15 @@
  * 5. Exercises the complete API: hello, listCategories, listSnippets, search,
  *    getSnippetBody, vault operations
  *
- * This tests the EXACT same code path that Chrome uses, against the user's
- * REAL database, with the REAL installed binary and manifest.
+ * This uses a disposable synthetic APPDATA/LOCALAPPDATA fixture. It verifies
+ * the installed manifest and executable without reading or mutating the user's
+ * canonical CopyIt database.
  *
  * Usage: node tests/real-native-host-test.mjs
  */
 import { spawn, execSync } from "node:child_process";
 import { readFileSync, existsSync } from "node:fs";
+import { createCertFixture } from "./helpers/cert-fixture.mjs";
 
 const EXPECTED_ID = "mmiopnfmhmmlmhcdjklelfcdahmgchfc";
 const EXPECTED_ORIGIN = `chrome-extension://${EXPECTED_ID}/`;
@@ -179,10 +179,15 @@ async function main() {
   // === 3. Launch native host (simulating Chrome) ===
   console.log("\n--- 3. Native Host Launch ---");
   const hostExe = manifest.path;
+  const fixture = createCertFixture();
+  console.log(`  Disposable APPDATA fixture: ${fixture.tmpDir}`);
+  process.on("exit", () => fixture.cleanup());
+
 
   // Chrome launches: <exe> chrome-extension://<id>/ --parent-window=0
   const proc = spawn(hostExe, [EXPECTED_ORIGIN, "--parent-window=0"], {
     stdio: ["pipe", "pipe", "pipe"],
+    env: { ...process.env, APPDATA: fixture.tmpDir, LOCALAPPDATA: fixture.tmpDir },
   });
 
   let stderrData = "";
@@ -520,6 +525,7 @@ async function main() {
     fail("protocol:origin-rejection", e.message);
   }
 
+  fixture.cleanup();
   // === Summary ===
   console.log(`\n${"=".repeat(60)}`);
   console.log("REAL NATIVE HOST CERTIFICATION SUMMARY");
