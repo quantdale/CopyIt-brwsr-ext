@@ -191,3 +191,9 @@ Conventions and rules:
 `VERIFIED-CODE` · `VERIFIED-CROSS-REPO` · `RUNTIME-VERIFIED` · `HISTORICAL-EVIDENCE` · `FAILED` · `NOT-RUN / ENVIRONMENT-BLOCKED`
 
 A skip, absent browser, substitute browser, timeout, manually killed process, or unexecuted workflow is **never** a PASS. Bundled Chromium is Chromium evidence, never Chrome evidence; a "real Chrome" claim requires a real `chrome.exe` executing the journey. `BUILD SUCCESSFUL` is not verification.
+
+## Cross-project UX, DX, and AX principles
+
+Cut taglines, helper text and secondary labels. If a screen needs them to make sense, fix the layout.
+
+Make the best decision that will elevate all three: the user experience (UX), developer experience (DX), and agent experience (AX) always, without breaking anything.
